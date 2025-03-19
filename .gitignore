@@ -1,0 +1,65 @@
+# Ignorar node_modules en todas las carpetas
+node_modules/
+client/node_modules/
+server/node_modules/
+
+# Ignorar archivos de dependencias innecesarias
+package-lock.json
+client/package-lock.json
+server/package-lock.json
+yarn.lock
+client/yarn.lock
+server/yarn.lock
+
+# Archivos de configuración del entorno (variables de entorno)
+.env
+.env.local
+.env.development
+.env.development.local
+.env.test
+.env.test.local
+.env.production
+.env.production.local
+
+# Archivos de build de React y Node.js
+build/
+client/build/
+server/build/
+dist/
+client/dist/
+server/dist/
+
+# Logs y registros de errores
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+*.log
+
+# Archivos del sistema y del editor de código
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Cachés y archivos temporales de testing
+coverage/
+client/coverage/
+server/coverage/
+.cache/
+.eslintcache
+
+# Configuración de Docker (si usas Docker)
+docker-compose.override.yml
+docker-compose.override.yaml
+
+# Configuración de Firebase (si usas Firebase)
+.firebase/
+firestore.indexes.json
+firestore.rules
+
+# Configuración de TypeScript (si usas TypeScript)
+*.tsbuildinfo
