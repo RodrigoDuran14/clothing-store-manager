@@ -63,3 +63,5 @@ firestore.rules
 
 # Configuración de TypeScript (si usas TypeScript)
 *.tsbuildinfo
+
+*.txt
