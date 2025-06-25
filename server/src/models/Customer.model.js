@@ -34,4 +34,6 @@ const customerSchema = new mongoose.Schema({
 
 customerSchema.index({email: 1})
 
-module.exports = mongoose.model('Customer', customerSchema)
+const CustomerModel = mongoose.model('Customer', customerSchema)
+
+module.exports = CustomerModel;

@@ -5,10 +5,13 @@ const UserSchema = new mongoose.Schema(
     name: String,
     email: {type: String, unique: true},
     phone: String,
-    image: String,
-    admin: {type: Boolean, default: false}
+    password: String,
+    admin: {type: Boolean, default: false},
+    active: {type: Boolean, default: true}
   },
   { timestamps: true }
 );
 
-module.exports = mongoose.model("User", UserSchema);
+const UserModel = mongoose.model("User", UserSchema);
+
+module.exports = UserModel; 
