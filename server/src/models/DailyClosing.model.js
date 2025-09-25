@@ -38,6 +38,10 @@ const dailyClosingSchema = new mongoose.Schema(
       type: [partnerAmountSchema],
       default: [],
     },
+    active: {
+      type: Boolean,
+      default: true,
+    },
   },
   { timestamps: true }
 );

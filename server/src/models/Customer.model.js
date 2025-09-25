@@ -88,6 +88,10 @@ const customerSchema = new mongoose.Schema(
     },
     purchaseHistory: { type: [purchaseSchema], default: [] },
     account: { type: accountSchema, default: {} },
+    active: {
+      type: Boolean,
+      default: true,
+    },
   },
   { timestamps: true }
 );

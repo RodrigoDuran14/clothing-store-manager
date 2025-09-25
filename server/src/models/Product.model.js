@@ -88,6 +88,10 @@ const productSchema = new mongoose.Schema(
       sparse: true, // Permite valores nulos sin romper el índice único
     },
     priceHistory: [priceHistorySchema],
+    active: {
+      type: Boolean,
+      default: true,
+    },
     createdAt: {
       type: Date,
       default: Date.now,

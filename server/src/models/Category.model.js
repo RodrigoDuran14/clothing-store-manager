@@ -14,6 +14,10 @@ const categorySchema = new mongoose.Schema(
       type: String,
       maxlength: [100, "La descripción no puede superar los 100 caracteres"],
     },
+    active: {
+      type: Boolean,
+      default: true,
+    },
   },
   { timestamps: true }
 );

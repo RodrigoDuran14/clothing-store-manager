@@ -34,6 +34,10 @@ const inventorySchema = new mongoose.Schema(
       type: [inventoryMovementSchema],
       default: [],
     },
+    active: {
+      type: Boolean,
+      default: true,
+    },
   },
   { timestamps: true }
 );

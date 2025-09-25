@@ -102,6 +102,10 @@ const invoiceSchema = new mongoose.Schema(
       enum: ["issued", "canceled"],
       default: "issued",
     },
+    active: {
+      type: Boolean,
+      default: true,
+    },
   },
   { timestamps: true }
 );

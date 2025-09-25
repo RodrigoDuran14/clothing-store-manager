@@ -108,6 +108,10 @@ const saleSchema = new mongoose.Schema(
       enum: ["pending", "paid", "canceled"],
       default: "pending",
     },
+    active: {
+      type: Boolean,
+      default: true,
+    },
   },
   { timestamps: true }
 );

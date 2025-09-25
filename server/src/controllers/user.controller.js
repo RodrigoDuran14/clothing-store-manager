@@ -15,12 +15,6 @@ const postUser = async (req, res, next) => {
   try {
     const { name, email, phone, password, admin } = req.body;
 
-    if ((!name, !email, !phone, !password)) {
-      return res
-        .status(404)
-        .send({ error: "Todos los campos son obligatorios" });
-    }
-
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const newUser = new UserModel({
@@ -109,7 +103,7 @@ const getUserById = async (req, res, next) => {
 
     const user = await UserModel.findById({ _id: id });
 
-    if (!empleado) {
+    if (!user) {
       return res.status(404).send({ error: "Usuario no encontrado" });
     }
 

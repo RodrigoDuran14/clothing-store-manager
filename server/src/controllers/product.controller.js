@@ -70,7 +70,70 @@ const getProductsList = async (req, res, next) => {
   }
 };
 
+const updateProduct = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const update = req.body;
+
+    const updatedProduct = await ProductModel.findByIdAndUpdate(
+      id,
+      { $set: update },
+      { new: true }
+    );
+
+    if (!updatedProduct) {
+      return res.status(404).send({ error: "Producto no encontrado" });
+    }
+
+    res.status(200).send(updatedProduct);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const updateActiveProduct = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const product = await ProductModel.findById(id);
+
+    if (!product) return res.status(404).send({ error: "Producto no encontrado" });
+
+    product.active = !product.active
+
+    await product.save();
+
+    res.status(200).send(product);
+  } catch (error) {
+    next(error)
+  }
+};
+
+const getProductById = async (req,res,next) =>{
+  try {
+    const {id} = req.params
+    const product = await ProductModel.findById({_id:id})
+
+    if(!product) return res.status(404).send({error: "Producto no encontrado"})
+
+    res.status(200).send(product)
+  } catch (error) {
+    next(error)
+  }
+}
+
+const findProduct = (req,res,next) =>{
+  try {
+    
+  } catch (error) {
+    next(error)
+  }
+}
+
 module.exports = {
   postProduct,
   getProductsList,
+  updateProduct,
+  updateActiveProduct,
+  getProductById
 };

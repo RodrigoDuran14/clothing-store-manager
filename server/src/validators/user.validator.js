@@ -45,4 +45,55 @@ const validatePostUser = (req, res, next) => {
   next();
 };
 
-module.exports = { validatePostUser };
+const validateUpdateUser = (req, res, next) => {
+  const { name, email, phone, password, admin, active } = req.body;
+  const errors = [];
+
+  if (name !== undefined) {
+    if (typeof name !== "string" || name.trim().length < 3) {
+      errors.push("El nombre debe tener al menos 3 caracteres.");
+    } else if (name.trim().length > 25) {
+      errors.push("El nombre no puede superar los 25 caracteres.");
+    }
+  }
+
+  if (email !== undefined) {
+    const emailRegex = /^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$/;
+    if (typeof email !== "string" || !emailRegex.test(email)) {
+      errors.push("El email debe tener un formato válido.");
+    }
+  }
+
+  if (phone !== undefined) {
+    if (typeof phone !== "string") {
+      errors.push("El teléfono debe ser un string.");
+    } else if (phone.trim().length < 6) {
+      errors.push("El número de teléfono debe tener al menos 6 caracteres.");
+    } else if (phone.trim().length > 20) {
+      errors.push("El número de teléfono no puede superar los 20 caracteres.");
+    }
+  }
+
+  if (password !== undefined) {
+    if (typeof password !== "string" || password.length < 6) {
+      errors.push("La contraseña debe tener al menos 6 caracteres.");
+    }
+  }
+
+  if (admin !== undefined && typeof admin !== "boolean") {
+    errors.push("El campo admin debe ser true o false.");
+  }
+
+  if (active !== undefined && typeof active !== "boolean") {
+    errors.push("El campo active debe ser true o false.");
+  }
+
+  if (errors.length > 0) {
+    return res.status(400).json({ errors });
+  }
+
+  next();
+};
+
+
+module.exports = { validatePostUser, validateUpdateUser };

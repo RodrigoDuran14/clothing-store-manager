@@ -42,6 +42,10 @@ const supplierSchema = new mongoose.Schema(
         ref: "Product",
       },
     ],
+    active: {
+      type: Boolean,
+      default: true,
+    },
   },
   { timestamps: true }
 );

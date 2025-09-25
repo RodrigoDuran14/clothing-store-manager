@@ -42,6 +42,10 @@ const partnerCashboxSchema = new mongoose.Schema(
       type: [cashboxTransactionSchema],
       default: [],
     },
+    active: {
+      type: Boolean,
+      default: true,
+    },
   },
   { timestamps: true }
 );

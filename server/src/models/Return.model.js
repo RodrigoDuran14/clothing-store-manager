@@ -32,6 +32,10 @@ const returnSchema = new mongoose.Schema(
       enum: ["pending", "processed", "rejected"],
       default: "pending",
     },
+    active: {
+      type: Boolean,
+      default: true,
+    },
   },
   { timestamps: true }
 );

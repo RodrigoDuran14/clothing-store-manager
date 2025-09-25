@@ -26,6 +26,10 @@ const transferSchema = new mongoose.Schema(
       required: [true, "El método de transferencia es obligatorio"],
       enum: ["cash", "bank", "other"],
     },
+    active: {
+      type: Boolean,
+      default: true,
+    },
   },
   { timestamps: true }
 );
