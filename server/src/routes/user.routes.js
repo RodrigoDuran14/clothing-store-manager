@@ -1,14 +1,25 @@
-const express = require('express')
-const router = express.Router()
-const {getUserList, postUser, updateUser, updateActiveUser, updateAdminUser, getUserById, findUser} = require('../controllers/user.controller')
-const {validatePostUser, validateUpdateUser} = require('../validators/user.validator.js')
+const express = require("express");
+const router = express.Router();
+const {
+  getUserList,
+  postUser,
+  updateUser,
+  updateActiveUser,
+  updateAdminUser,
+  getUserById,
+  findUser,
+} = require("../controllers/user.controller");
+const {
+  validatePostUser,
+  validateUpdateUser,
+} = require("../validators/user.validator.js");
 
-router.get('/users', getUserList)
-router.get('/user/:id', getUserById)
-router.get('/user', findUser)
-router.post('/user', validatePostUser, postUser)
-router.put('/user/:id', validateUpdateUser, updateUser)
-router.patch('/useractive/:id', updateActiveUser)
-router.patch('/useradmin/:id', updateAdminUser)
+router.get("/users", getUserList);
+router.get("/user/:id", getUserById);
+router.get("/user", findUser);
+router.post("/user", validatePostUser, postUser);
+router.put("/user/:id", validateUpdateUser, updateUser);
+router.patch("/useractive/:id", updateActiveUser);
+router.patch("/useradmin/:id", updateAdminUser);
 
-module.exports = router
+module.exports = router;
