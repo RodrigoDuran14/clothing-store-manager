@@ -8,6 +8,7 @@ const {
   updateAdminUser,
   getUserById,
   findUser,
+  deleteUser
 } = require("../controllers/user.controller");
 const {
   validatePostUser,
@@ -21,5 +22,6 @@ router.post("/user", validatePostUser, postUser);
 router.put("/user/:id", validateUpdateUser, updateUser);
 router.patch("/useractive/:id", updateActiveUser);
 router.patch("/useradmin/:id", updateAdminUser);
+router.delete("/user/:id", deleteUser)
 
 module.exports = router;

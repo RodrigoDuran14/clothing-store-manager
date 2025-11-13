@@ -6,6 +6,7 @@ const connectDB = require("./config/db");
 
 const userRoutes = require('./routes/user.routes')
 const productRoutes = require('./routes/product.routes')
+const customerRoutes = require('./routes/customer.routes')
 
 dotenv.config();
 connectDB();
@@ -20,6 +21,7 @@ app.use(morgan('dev'))
 //configuracion endpoints
 app.use("/api", userRoutes);
 app.use('/api', productRoutes)
+app.use('/api', customerRoutes)
 
 const PORT = process.env.PORT || 5000;
 

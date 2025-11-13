@@ -76,6 +76,21 @@ const updateActiveUser = async (req, res, next) => {
   }
 };
 
+const deleteUser = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const deleted = await UserModel.findByIdAndDelete(id);
+
+    if (!deleted) {
+      return res.status(404).send({ error: "Usuario no encontrado" });
+    }
+
+    res.status(200).send({ message: "Usuario eliminado correctamente" });
+  } catch (error) {
+    next(error);
+  }
+};
+
 const updateAdminUser = async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -141,5 +156,6 @@ module.exports = {
   updateActiveUser,
   updateAdminUser,
   getUserById,
-  findUser
+  findUser,
+  deleteUser
 };
