@@ -13,6 +13,8 @@ const connectDB = require('./src/config/database');
 // Importar rutas
 const authRoutes = require('./src/routes/authRoutes');
 const userRoutes = require('./src/routes/userRoutes');
+const productRoutes = require('./src/routes/productRoutes');
+const categoryRoutes = require('./src/routes/categoryRoutes');
 
 // Importar middleware de errores
 const errorHandler = require('./src/middleware/errorHandler');
@@ -45,6 +47,8 @@ app.get('/health', (req, res) => {
 // Rutas de la API
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/products', productRoutes);
+app.use('/api/categories', categoryRoutes);
 
 // Ruta base para verificar API
 app.get('/api', (req, res) => {
