@@ -18,6 +18,9 @@ const categoryRoutes = require('./src/routes/categoryRoutes');
 const supplierRoutes = require('./src/routes/supplierRoutes');
 const clientRoutes = require('./src/routes/clientRoutes');
 const sellerRoutes = require('./src/routes/sellerRoutes');
+const saleRoutes = require('./src/routes/saleRoutes');
+const returnRoutes = require('./src/routes/returnRoutes');
+const promotionRoutes = require('./src/routes/promotionRoutes');
 
 // Importar middleware de errores
 const errorHandler = require('./src/middleware/errorHandler');
@@ -55,6 +58,9 @@ app.use('/api/categories', categoryRoutes);
 app.use('/api/suppliers', supplierRoutes);
 app.use('/api/clients', clientRoutes);
 app.use('/api/sellers', sellerRoutes);
+app.use('/api/sales', saleRoutes);
+app.use('/api/returns', returnRoutes);
+app.use('/api/promotions', promotionRoutes);
 
 // Ruta base para verificar API
 app.get('/api', (req, res) => {
