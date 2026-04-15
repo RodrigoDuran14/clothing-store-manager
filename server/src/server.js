@@ -25,6 +25,7 @@ const bankAccountRoutes = require('./src/routes/bankAccountRoutes');
 const partnerRoutes = require('./src/routes/partnerRoutes');
 const partnerSplitRoutes = require('./src/routes/partnerSplitRoutes');
 const cashRoutes = require('./src/routes/cashRoutes');
+const invoiceRoutes = require('./src/routes/invoiceRoutes');
 
 // Importar middleware de errores
 const errorHandler = require('./src/middleware/errorHandler');
@@ -69,6 +70,7 @@ app.use('/api/bank-accounts', bankAccountRoutes);
 app.use('/api/partners', partnerRoutes);
 app.use('/api/partner-splits', partnerSplitRoutes);
 app.use('/api/cash', cashRoutes);
+app.use('/api/invoices', invoiceRoutes);
 
 // Ruta base para verificar API
 app.get('/api', (req, res) => {

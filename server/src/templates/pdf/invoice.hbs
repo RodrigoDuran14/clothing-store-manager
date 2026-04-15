@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Factura {{invoiceNumber}}</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: 'Helvetica', 'Arial', sans-serif;
+      font-size: 12px;
+      line-height: 1.4;
+      color: #333;
+      padding: 20px;
+    }
+    
+    .invoice-container {
+      max-width: 800px;
+      margin: 0 auto;
+      border: 1px solid #ddd;
+      padding: 20px;
+    }
+    
+    /* Header */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 30px;
+      padding-bottom: 20px;
+      border-bottom: 2px solid #333;
+    }
+    
+    .logo h1 {
+      font-size: 24px;
+      color: #0D8F81;
+    }
+    
+    .invoice-info {
+      text-align: right;
+    }
+    
+    .invoice-title {
+      font-size: 20px;
+      font-weight: bold;
+      margin-bottom: 10px;
+    }
+    
+    /* Sección de datos */
+    .data-section {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 30px;
+    }
+    
+    .emitter, .receiver {
+      width: 48%;
+    }
+    
+    .section-title {
+      font-weight: bold;
+      margin-bottom: 10px;
+      padding-bottom: 5px;
+      border-bottom: 1px solid #ccc;
+    }
+    
+    /* Tabla de productos */
+    .products-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 20px;
+    }
+    
+    .products-table th,
+    .products-table td {
+      border: 1px solid #ddd;
+      padding: 8px;
+      text-align: left;
+    }
+    
+    .products-table th {
+      background-color: #f5f5f5;
+      font-weight: bold;
+    }
+    
+    .products-table td.text-right {
+      text-align: right;
+    }
+    
+    /* Totales */
+    .totals {
+      width: 300px;
+      margin-left: auto;
+      margin-top: 20px;
+    }
+    
+    .totals table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    
+    .totals td {
+      padding: 5px;
+    }
+    
+    .totals .total-row {
+      font-weight: bold;
+      border-top: 2px solid #333;
+      font-size: 14px;
+    }
+    
+    /* Footer */
+    .footer {
+      margin-top: 40px;
+      padding-top: 20px;
+      border-top: 1px solid #ddd;
+      text-align: center;
+      font-size: 10px;
+      color: #666;
+    }
+    
+    .qr-code {
+      text-align: center;
+      margin-top: 20px;
+    }
+    
+    .qr-code img {
+      max-width: 100px;
+    }
+    
+    .cae {
+      font-size: 10px;
+      text-align: center;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="invoice-container">
+    <!-- Header -->
+    <div class="header">
+      <div class="logo">
+        <h1>{{emitter.businessName}}</h1>
+      </div>
+      <div class="invoice-info">
+        <div class="invoice-title">
+          FACTURA {{#if invoiceType}}{{invoiceType}}{{else}}B{{/if}}
+        </div>
+        <div>Nº {{invoiceNumber}}</div>
+        <div>Fecha: {{formatDate issueDate}}</div>
+      </div>
+    </div>
+    
+    <!-- Datos del emisor y receptor -->
+    <div class="data-section">
+      <div class="emitter">
+        <div class="section-title">EMISOR</div>
+        <div><strong>{{emitter.businessName}}</strong></div>
+        <div>CUIT: {{emitter.taxId}}</div>
+        <div>Dirección: {{emitter.address.street}} {{emitter.address.number}}</div>
+        <div>Condición IVA: {{emitter.taxCondition}}</div>
+        <div>Punto de Venta: {{pointOfSale}}</div>
+      </div>
+      <div class="receiver">
+        <div class="section-title">RECEPTOR</div>
+        <div><strong>{{receiver.businessName}}</strong></div>
+        <div>{{receiver.taxIdType}}: {{receiver.taxId}}</div>
+        {{#if receiver.address.street}}
+        <div>Dirección: {{receiver.address.street}} {{receiver.address.number}}</div>
+        {{/if}}
+        <div>Condición IVA: {{receiver.taxCondition}}</div>
+      </div>
+    </div>
+    
+    <!-- Detalle de productos -->
+    <table class="products-table">
+      <thead>
+        <tr>
+          <th>Cant.</th>
+          <th>Descripción</th>
+          <th>Precio Unit.</th>
+          <th>Descuento</th>
+          <th>Subtotal</th>
+          <th>IVA</th>
+          <th>Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each details}}
+        <tr>
+          <td>{{quantity}}</td>
+          <td>{{description}}</td>
+          <td class="text-right">{{formatNumber unitPrice}}</td>
+          <td class="text-right">{{formatNumber discount}}</td>
+          <td class="text-right">{{formatNumber subtotal}}</td>
+          <td class="text-right">{{vatRate}}%</td>
+          <td class="text-right">{{formatNumber total}}</td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+    
+    <!-- Totales -->
+    <div class="totals">
+      <table>
+        <tr>
+          <td>SUBTOTAL:</td>
+          <td class="text-right">{{formatNumber subtotal}}</td>
+        </tr>
+        {{#if totalDiscount}}
+        <tr>
+          <td>DESCUENTO:</td>
+          <td class="text-right">{{formatNumber totalDiscount}}</td>
+        </tr>
+        {{/if}}
+        {{#each taxes}}
+        <tr>
+          <td>{{type}}:</td>
+          <td class="text-right">{{formatNumber amount}}</td>
+        </tr>
+        {{/each}}
+        <tr class="total-row">
+          <td><strong>TOTAL:</strong></td>
+          <td class="text-right"><strong>{{formatNumber total}}</strong></td>
+        </tr>
+      </table>
+    </div>
+    
+    <!-- Método de pago -->
+    <div style="margin-top: 20px;">
+      <strong>MÉTODO DE PAGO:</strong> {{paymentMethod}}
+    </div>
+    
+    <!-- QR y CAE (si es factura fiscal) -->
+    {{#if afipQrCode}}
+    <div class="qr-code">
+      <img src="{{afipQrCode}}" alt="QR AFIP">
+      <div class="cae">CAE: {{afipAuthCode}}</div>
+      <div class="cae">Vto. CAE: {{formatDate afipAuthCodeExpiration}}</div>
+    </div>
+    {{/if}}
+    
+    <!-- Footer -->
+    <div class="footer">
+      <p>Original: Cliente | Duplicado: Emisor</p>
+      <p>Factura sujeta a comprobación fiscal</p>
+    </div>
+  </div>
+</body>
+</html>
