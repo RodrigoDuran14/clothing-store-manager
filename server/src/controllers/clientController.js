@@ -12,7 +12,7 @@ exports.getClients = async (req, res, next) => {
       page = 1,
       limit = 10,
       isActive,
-      isVip,              // Corregido: antes era 'isisVip'
+      isVip,
       category,
       search,
       orderBy = 'name'
@@ -21,7 +21,7 @@ exports.getClients = async (req, res, next) => {
     // Construir filtro de búsqueda
     const filter = {};
     if (isActive !== undefined) filter.isActive = isActive === 'true';
-    if (isVip !== undefined) filter.isVip = isVip === 'true';  // Corregido
+    if (isVip !== undefined) filter.isVip = isVip === 'true';
     if (category) filter.clientCategory = category;
     
     // Búsqueda por texto en múltiples campos
@@ -325,7 +325,7 @@ exports.disableCredit = async (req, res, next) => {
   }
 };
 
-// @desc    Registrar pago a cuenta corriente
+// @desc    Registrar pago a cuenta corriente (usando creditService)
 // @route   POST /api/clients/:id/credit/payment
 // @access  Private/Admin
 exports.registerCreditPayment = async (req, res, next) => {
@@ -358,7 +358,7 @@ exports.registerCreditPayment = async (req, res, next) => {
   }
 };
 
-// @desc    Obtener resumen de cuenta corriente
+// @desc    Obtener resumen de cuenta corriente (usando creditService)
 // @route   GET /api/clients/:id/credit/summary
 // @access  Private
 exports.getCreditSummary = async (req, res, next) => {
@@ -368,6 +368,31 @@ exports.getCreditSummary = async (req, res, next) => {
     res.status(200).json({
       success: true,
       data: summary
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Verificar límite de crédito antes de una compra (usando creditService)
+// @route   GET /api/clients/:id/credit/check
+// @access  Private
+exports.checkCreditLimit = async (req, res, next) => {
+  try {
+    const { amount } = req.query;
+    
+    if (!amount || amount <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'El monto es requerido y debe ser mayor a 0'
+      });
+    }
+    
+    const result = await creditService.checkCreditBeforeSale(req.params.id, parseFloat(amount));
+    
+    res.status(200).json({
+      success: true,
+      data: result
     });
   } catch (error) {
     next(error);
@@ -423,7 +448,7 @@ exports.getPurchaseHistory = async (req, res, next) => {
   }
 };
 
-// @desc    Obtener clientes con riesgo de crédito
+// @desc    Obtener clientes con riesgo de crédito (usando modelo, pero creditService tiene método similar)
 // @route   GET /api/clients/credit-risk
 // @access  Private/Admin
 exports.getCreditRiskClients = async (req, res, next) => {
@@ -432,10 +457,19 @@ exports.getCreditRiskClients = async (req, res, next) => {
     // Usar método estático del modelo
     const clients = await Client.getClientsWithCreditRisk(parseInt(percentage));
     
+    // Enriquecer con información adicional usando creditService si es necesario
+    const clientsWithDetails = await Promise.all(clients.map(async (client) => {
+      const summary = await creditService.getCreditSummary(client._id);
+      return {
+        ...client.toObject(),
+        creditSummary: summary
+      };
+    }));
+    
     res.status(200).json({
       success: true,
-      data: clients,
-      total: clients.length
+      data: clientsWithDetails,
+      total: clientsWithDetails.length
     });
   } catch (error) {
     next(error);
@@ -473,6 +507,12 @@ exports.getClientStats = async (req, res, next) => {
       { $group: { _id: null, totalDebt: { $sum: '$creditAccount.balance' } } }
     ]);
     
+    // Clientes que han alcanzado el límite de crédito
+    const clientsAtLimit = await Client.countDocuments({
+      'creditAccount.isEnabled': true,
+      $expr: { $gte: ['$creditAccount.balance', '$creditAccount.creditLimit'] }
+    });
+    
     res.status(200).json({
       success: true,
       data: {
@@ -481,6 +521,7 @@ exports.getClientStats = async (req, res, next) => {
         inactive: inactiveClients,
         vip: vipClients,
         creditEnabled: creditEnabled,
+        creditAtLimit: clientsAtLimit,
         categoryDistribution: categories,
         totalSpentAccumulated: totalSpent[0]?.total || 0,
         averageSpentPerClient: averageSpent,

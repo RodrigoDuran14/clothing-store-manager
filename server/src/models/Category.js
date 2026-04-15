@@ -50,6 +50,11 @@ const categorySchema = new mongoose.Schema({
     unique: true,
     lowercase: true,
     trim: true
+  },
+  partnerId: {  // Socio dueño de esta categoría
+  type: mongoose.Schema.Types.ObjectId,
+  ref: 'Partner',
+  default: null
   }
 }, {
   timestamps: true,

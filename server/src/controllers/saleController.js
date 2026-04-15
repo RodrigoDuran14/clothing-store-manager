@@ -1,11 +1,14 @@
-const Sale = require('../models/Sale');
-const Client = require('../models/Client');
-const Seller = require('../models/Seller');
-const Product = require('../models/Product');
-const stockService = require('../services/stockService');
-const creditService = require('../services/creditService');
-const commissionService = require('../services/commissionService');
-const { filterObj, paginate, formatPagination } = require('../utils/helpers');
+const mongoose = require("mongoose");
+const Sale = require("../models/Sale");
+const Client = require("../models/Client");
+const Seller = require("../models/Seller");
+const Product = require("../models/Product");
+const PartnerSplit = require('../models/PartnerSplit');
+const stockService = require("../services/stockService");
+const creditService = require("../services/creditService");
+const commissionService = require("../services/commissionService");
+const partnerSplitService = require("../services/partnerSplitService");
+const { filterObj, paginate, formatPagination } = require("../utils/helpers");
 
 // @desc    Obtener todas las ventas
 // @route   GET /api/sales
@@ -25,80 +28,84 @@ exports.getSales = async (req, res, next) => {
       minTotal,
       maxTotal,
       saleNumber,
-      orderBy = 'date_desc'
+      orderBy = "date_desc",
     } = req.query;
-    
+
     // Construir filtro
     const filter = {};
-    
+
     if (clientId) filter.clientId = clientId;
     if (sellerId) filter.sellerId = sellerId;
     if (status) filter.status = status;
     if (paymentStatus) filter.paymentStatus = paymentStatus;
     if (origin) filter.origin = origin;
-    if (saleNumber) filter.saleNumber = { $regex: saleNumber, $options: 'i' };
-    
+    if (saleNumber) filter.saleNumber = { $regex: saleNumber, $options: "i" };
+
     // Filtro de fecha
     if (startDate || endDate) {
       filter.date = {};
       if (startDate) filter.date.$gte = new Date(startDate);
       if (endDate) filter.date.$lte = new Date(endDate);
     }
-    
+
     // Filtro de total
     if (minTotal || maxTotal) {
       filter.total = {};
       if (minTotal) filter.total.$gte = parseFloat(minTotal);
       if (maxTotal) filter.total.$lte = parseFloat(maxTotal);
     }
-    
+
     // Configurar ordenamiento
     let sort = {};
-    switch(orderBy) {
-      case 'date_asc':
+    switch (orderBy) {
+      case "date_asc":
         sort = { date: 1 };
         break;
-      case 'date_desc':
+      case "date_desc":
         sort = { date: -1 };
         break;
-      case 'total_asc':
+      case "total_asc":
         sort = { total: 1 };
         break;
-      case 'total_desc':
+      case "total_desc":
         sort = { total: -1 };
         break;
-      case 'saleNumber':
+      case "saleNumber":
         sort = { saleNumber: 1 };
         break;
       default:
         sort = { date: -1 };
     }
-    
-    const { skip, limit: limitValue, page: currentPage } = paginate(page, limit);
-    
+
+    const {
+      skip,
+      limit: limitValue,
+      page: currentPage,
+    } = paginate(page, limit);
+
     const sales = await Sale.find(filter)
-      .populate('clientId', 'name email phone')
-      .populate('sellerId', 'firstName lastName')
-      .populate('createdBy', 'name email')
+      .populate("clientId", "name email phone")
+      .populate("sellerId", "firstName lastName")
+      .populate("createdBy", "name email")
       .sort(sort)
       .skip(skip)
       .limit(limitValue);
-    
+
     // Agregar información virtual
-    const salesWithVirtuals = sales.map(sale => ({
+    const salesWithVirtuals = sales.map((sale) => ({
       ...sale.toObject(),
       paidAmount: sale.paidAmount,
       pendingBalance: sale.pendingBalance,
-      paymentPercentage: sale.paymentPercentage
+      paymentPercentage: sale.paymentPercentage,
     }));
-    
+
     const total = await Sale.countDocuments(filter);
     const pagination = formatPagination(total, currentPage, limitValue);
-    
+
     res.status(200).json({
       success: true,
       data: salesWithVirtuals,
-      pagination
+      pagination,
     });
   } catch (error) {
     next(error);
@@ -111,30 +118,30 @@ exports.getSales = async (req, res, next) => {
 exports.getSaleById = async (req, res, next) => {
   try {
     const sale = await Sale.findById(req.params.id)
-      .populate('clientId', 'name email phone document addresses')
-      .populate('sellerId', 'firstName lastName commissionRate')
-      .populate('createdBy', 'name email')
-      .populate('updatedBy', 'name email')
-      .populate('items.productId', 'name images variants');
-    
+      .populate("clientId", "name email phone document addresses")
+      .populate("sellerId", "firstName lastName commissionRate")
+      .populate("createdBy", "name email")
+      .populate("updatedBy", "name email")
+      .populate("items.productId", "name images variants");
+
     if (!sale) {
       return res.status(404).json({
         success: false,
-        message: 'Sale not found'
+        message: "Sale not found",
       });
     }
-    
+
     // Agregar información virtual
     const saleData = {
       ...sale.toObject(),
       paidAmount: sale.paidAmount,
       pendingBalance: sale.pendingBalance,
-      paymentPercentage: sale.paymentPercentage
+      paymentPercentage: sale.paymentPercentage,
     };
-    
+
     res.status(200).json({
       success: true,
-      data: saleData
+      data: saleData,
     });
   } catch (error) {
     next(error);
@@ -147,26 +154,26 @@ exports.getSaleById = async (req, res, next) => {
 exports.getSaleByNumber = async (req, res, next) => {
   try {
     const { saleNumber } = req.params;
-    
+
     const sale = await Sale.findOne({ saleNumber })
-      .populate('clientId', 'name email phone')
-      .populate('sellerId', 'firstName lastName')
-      .populate('items.productId', 'name images');
-    
+      .populate("clientId", "name email phone")
+      .populate("sellerId", "firstName lastName")
+      .populate("items.productId", "name images");
+
     if (!sale) {
       return res.status(404).json({
         success: false,
-        message: 'Sale not found'
+        message: "Sale not found",
       });
     }
-    
+
     res.status(200).json({
       success: true,
       data: {
         ...sale.toObject(),
         paidAmount: sale.paidAmount,
-        pendingBalance: sale.pendingBalance
-      }
+        pendingBalance: sale.pendingBalance,
+      },
     });
   } catch (error) {
     next(error);
@@ -179,7 +186,7 @@ exports.getSaleByNumber = async (req, res, next) => {
 exports.createSale = async (req, res, next) => {
   const session = await mongoose.startSession();
   session.startTransaction();
-  
+
   try {
     const {
       clientId,
@@ -189,50 +196,50 @@ exports.createSale = async (req, res, next) => {
       tax = 0,
       payments = [],
       notes,
-      origin = 'physical_store',
+      origin = "physical_store",
       shippingCost = 0,
-      shippingAddress
+      shippingAddress,
     } = req.body;
-    
+
     // 1. Validar cliente
     const client = await Client.findById(clientId);
     if (!client) {
-      throw new Error('Client not found');
+      throw new Error("Client not found");
     }
-    
+
     // 2. Validar vendedor
     const seller = await Seller.findById(sellerId);
     if (!seller || !seller.active) {
-      throw new Error('Seller not found or inactive');
+      throw new Error("Seller not found or inactive");
     }
-    
+
     // 3. Verificar stock
     const stockCheck = await stockService.checkStockForSale(items);
     if (!stockCheck.hasStock) {
       return res.status(400).json({
         success: false,
-        message: 'Insufficient stock',
-        details: stockCheck.details.filter(d => !d.hasStock)
+        message: "Insufficient stock",
+        details: stockCheck.details.filter((d) => !d.hasStock),
       });
     }
-    
+
     // 4. Calcular totales
     let subtotal = 0;
     const itemsWithDetails = [];
-    
+
     for (const item of items) {
       const product = await Product.findById(item.productId);
       if (!product) {
         throw new Error(`Product not found: ${item.productId}`);
       }
-      
+
       const unitPrice = product.price;
       const itemSubtotal = unitPrice * item.quantity;
       const itemDiscount = (itemSubtotal * (item.discount || 0)) / 100;
       const finalSubtotal = itemSubtotal - itemDiscount;
-      
+
       subtotal += finalSubtotal;
-      
+
       itemsWithDetails.push({
         productId: item.productId,
         size: item.size,
@@ -242,17 +249,22 @@ exports.createSale = async (req, res, next) => {
         discount: itemDiscount,
         subtotal: finalSubtotal,
         productName: product.name,
-        productSku: product.variants.find(v => v.size === item.size && v.color === item.color)?.sku
+        categoryId: product.categoryId, // NUEVO: para asignación a socios
+        productSku: product.variants.find(
+          (v) => v.size === item.size && v.color === item.color,
+        )?.sku,
       });
     }
-    
+
     const totalDiscount = discount;
     const finalTotal = subtotal - totalDiscount + tax + shippingCost;
-    
-    // 5. Verificar límite de crédito si usa cuenta corriente
-    const usesCredit = payments.some(p => p.method === 'credit_account');
+
+    // 5. Verificar límite de crédito si usa cuenta corriente (usando creditService)
+    const usesCredit = payments.some((p) => p.method === "credit_account");
     if (usesCredit) {
-      const creditCheck = client.checkCreditLimit(finalTotal);
+      // Usar creditService en lugar del método directo
+      const creditCheck = await creditService.checkCreditBeforeSale(clientId, finalTotal);
+      
       if (!creditCheck.allowed) {
         return res.status(400).json({
           success: false,
@@ -260,12 +272,20 @@ exports.createSale = async (req, res, next) => {
           data: {
             currentBalance: creditCheck.currentBalance,
             creditLimit: creditCheck.creditLimit,
-            newBalance: creditCheck.newBalance
-          }
+            availableCredit: creditCheck.availableCredit,
+            newBalance: creditCheck.newBalance,
+          },
         });
       }
+      
+      // Verificar y enviar alerta si está cerca del límite
+      const alert = await creditService.sendCreditAlert(clientId, 80);
+      if (alert.alertado) {
+        // Opcional: guardar en logs o enviar notificación
+        console.log(`Credit alert for client ${clientId}: ${alert.percentage_used}% used`);
+      }
     }
-    
+
     // 6. Crear venta
     const sale = new Sale({
       clientId,
@@ -281,64 +301,130 @@ exports.createSale = async (req, res, next) => {
       shippingCost,
       shippingAddress: shippingAddress || {},
       createdBy: req.user.id,
-      status: payments.length > 0 ? 'completed' : 'pending',
-      statusHistory: [{
-        status: payments.length > 0 ? 'completed' : 'pending',
-        note: 'Sale created',
-        userId: req.user.id
-      }]
+      status: payments.length > 0 ? "completed" : "pending",
+      statusHistory: [
+        {
+          status: payments.length > 0 ? "completed" : "pending",
+          note: "Sale created",
+          userId: req.user.id,
+        },
+      ],
     });
-    
+
     await sale.save({ session });
-    
+
     // 7. Descontar stock
     await stockService.deductStockForSale(items, sale._id, session);
-    
-    // 8. Registrar en cuenta corriente si aplica
+
+    // 8. Registrar en cuenta corriente si aplica (usando creditService)
     for (const payment of payments) {
-      if (payment.method === 'credit_account') {
-        await client.addCreditMovement(
-          'purchase',
+      if (payment.method === "credit_account") {
+        await creditService.registerPayment(
+          clientId,
           payment.amount,
           `Purchase - Sale ${sale.saleNumber}`,
           sale._id,
-          'Sale',
           req.user.id
         );
       }
     }
-    
+
     // 9. Registrar en historial de compras del cliente
-    const purchaseProducts = itemsWithDetails.map(item => ({
+    const purchaseProducts = itemsWithDetails.map((item) => ({
       productId: item.productId,
       name: item.productName,
       quantity: item.quantity,
       unitPrice: item.unitPrice,
-      subtotal: item.subtotal
+      subtotal: item.subtotal,
     }));
-    
+
     await client.addPurchaseToHistory(sale._id, finalTotal, purchaseProducts);
-    
+
     // 10. Registrar comisión del vendedor
     const commission = await commissionService.calculateSaleCommission(
       sellerId,
       finalTotal,
-      new Date()
+      new Date(),
     );
-    
+
     await seller.recordSale(finalTotal, sale._id);
+
+    // ============================================
+    // 11. DIVISIÓN DE INGRESOS ENTRE SOCIOS
+    // ============================================
     
+    // Asignar items a socios según sus categorías/productos
+    const partnerAllocations = await partnerSplitService.assignItemsToPartners(itemsWithDetails);
+
+    if (partnerAllocations.length > 0) {
+      // Crear registro de división
+      const splitData = {
+        saleId: sale._id,
+        saleNumber: sale.saleNumber,
+        date: sale.date,
+        totalAmount: finalTotal,
+        splits: partnerAllocations.map(alloc => ({
+          partnerId: alloc.partnerId,
+          partnerName: alloc.partnerName,
+          amount: alloc.totalAmount,
+          percentage: (alloc.totalAmount / finalTotal) * 100,
+          items: alloc.items.map(item => ({
+            productId: item.productId,
+            productName: item.productName,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            subtotal: item.itemTotal
+          })),
+          registered: false
+        })),
+        paymentMethod: payments[0]?.method || 'cash',
+        status: 'pending',
+        processedBy: req.user.id
+      };
+      
+      const partnerSplit = await PartnerSplit.create([splitData], { session });
+      
+      // Registrar ingreso para cada socio
+      for (const allocation of partnerAllocations) {
+        try {
+          const mainPaymentMethod = payments[0]?.method || "cash";
+          
+          const result = await partnerSplitService.registerPartnerIncome(
+            allocation.partnerId,
+            allocation.totalAmount,
+            sale._id,
+            mainPaymentMethod,
+            req.user.id,
+            session
+          );
+          
+          // Marcar el split como registrado
+          if (partnerSplit[0]) {
+            await partnerSplit[0].markSplitRegistered(
+              allocation.partnerId,
+              result.movement._id,
+              result.destination,
+              result.accountId
+            );
+          }
+        } catch (error) {
+          // Si falla (ej: caja cerrada), queda pendiente para procesar manualmente
+          console.log(`Auto-registration failed for partner ${allocation.partnerName}:`, error.message);
+        }
+      }
+    }
+
     await session.commitTransaction();
-    
+
     res.status(201).json({
       success: true,
       data: {
         ...sale.toObject(),
         paidAmount: sale.paidAmount,
         pendingBalance: sale.pendingBalance,
-        commission
+        commission,
       },
-      message: 'Sale created successfully'
+      message: "Sale created successfully",
     });
   } catch (error) {
     await session.abortTransaction();
@@ -354,39 +440,39 @@ exports.createSale = async (req, res, next) => {
 exports.addPayment = async (req, res, next) => {
   const session = await mongoose.startSession();
   session.startTransaction();
-  
+
   try {
     const { method, amount, bankAccountId, reference, installments } = req.body;
-    
+
     if (!amount || amount <= 0) {
       return res.status(400).json({
         success: false,
-        message: 'Amount must be greater than 0'
+        message: "Amount must be greater than 0",
       });
     }
-    
+
     const sale = await Sale.findById(req.params.id);
     if (!sale) {
       return res.status(404).json({
         success: false,
-        message: 'Sale not found'
+        message: "Sale not found",
       });
     }
-    
-    if (sale.status === 'cancelled') {
+
+    if (sale.status === "cancelled") {
       return res.status(400).json({
         success: false,
-        message: 'Cannot add payment to a cancelled sale'
+        message: "Cannot add payment to a cancelled sale",
       });
     }
-    
+
     if (sale.pendingBalance < amount) {
       return res.status(400).json({
         success: false,
-        message: `Payment amount exceeds pending balance. Pending: ${sale.pendingBalance}`
+        message: `Payment amount exceeds pending balance. Pending: ${sale.pendingBalance}`,
       });
     }
-    
+
     // Registrar pago
     const paymentData = {
       method,
@@ -394,36 +480,38 @@ exports.addPayment = async (req, res, next) => {
       bankAccountId,
       reference,
       installments: installments || 1,
-      date: new Date()
+      date: new Date(),
     };
-    
+
     const result = await sale.addPayment(paymentData, req.user.id);
-    
-    // Si es pago con cuenta corriente, registrar movimiento
-    if (method === 'credit_account') {
-      const client = await Client.findById(sale.clientId);
-      if (client && client.creditAccount.isEnabled) {
-        await client.addCreditMovement(
-          'payment',
-          amount,
-          `Payment for sale ${sale.saleNumber}`,
-          sale._id,
-          'Sale',
-          req.user.id
-        );
+
+    // Si es pago con cuenta corriente, usar creditService
+    if (method === "credit_account") {
+      const creditResult = await creditService.registerPayment(
+        sale.clientId,
+        amount,
+        `Payment for sale ${sale.saleNumber}`,
+        sale._id,
+        req.user.id
+      );
+      
+      // Verificar alerta después del pago
+      const alert = await creditService.sendCreditAlert(sale.clientId, 80);
+      if (alert.alertado) {
+        console.log(`Credit alert after payment for client ${sale.clientId}: ${alert.percentage_used}% used`);
       }
     }
-    
+
     await session.commitTransaction();
-    
+
     res.status(200).json({
       success: true,
       data: {
         saleId: sale._id,
         saleNumber: sale.saleNumber,
-        ...result
+        ...result,
       },
-      message: 'Payment added successfully'
+      message: "Payment added successfully",
     });
   } catch (error) {
     await session.abortTransaction();
@@ -439,57 +527,79 @@ exports.addPayment = async (req, res, next) => {
 exports.cancelSale = async (req, res, next) => {
   const session = await mongoose.startSession();
   session.startTransaction();
-  
+
   try {
     const { reason } = req.body;
-    
+
     const sale = await Sale.findById(req.params.id);
     if (!sale) {
       return res.status(404).json({
         success: false,
-        message: 'Sale not found'
+        message: "Sale not found",
       });
     }
-    
+
     if (!sale.canCancel()) {
       return res.status(400).json({
         success: false,
-        message: 'This sale cannot be cancelled'
+        message: "This sale cannot be cancelled",
       });
     }
-    
+
     // Cambiar estado
-    await sale.changeStatus('cancelled', reason || 'Sale cancelled by user', req.user.id);
-    
+    await sale.changeStatus(
+      "cancelled",
+      reason || "Sale cancelled by user",
+      req.user.id,
+    );
+
     // Restaurar stock
-    const itemsToRestore = sale.items.map(item => ({
+    const itemsToRestore = sale.items.map((item) => ({
       productId: item.productId,
       size: item.size,
       color: item.color,
-      quantity: item.quantity
+      quantity: item.quantity,
     }));
-    
-    await stockService.restoreStockForCancellation(itemsToRestore, sale._id, session);
-    
-    // Si tenía pagos con cuenta corriente, revertir movimientos
+
+    await stockService.restoreStockForCancellation(
+      itemsToRestore,
+      sale._id,
+      session,
+    );
+
+    // Si tenía pagos con cuenta corriente, revertir movimientos usando creditService
     for (const payment of sale.payments) {
-      if (payment.method === 'credit_account') {
+      if (payment.method === "credit_account") {
+        // Registrar reversión en cuenta corriente
         const client = await Client.findById(sale.clientId);
-        if (client) {
+        if (client && client.creditAccount.isEnabled) {
           await client.addCreditMovement(
-            'return',
+            "return",
             payment.amount,
             `Cancellation of sale ${sale.saleNumber}`,
             sale._id,
-            'Sale',
-            req.user.id
+            "Sale",
+            req.user.id,
           );
         }
       }
     }
+
+    // ============================================
+    // REVERTIR DIVISIÓN DE INGRESOS
+    // ============================================
     
+    // Buscar el split asociado a esta venta
+    const partnerSplit = await PartnerSplit.findOne({ saleId: sale._id });
+    
+    if (partnerSplit && partnerSplit.status === 'completed') {
+      // Actualizar estado del split
+      partnerSplit.status = 'cancelled';
+      await partnerSplit.save({ session });
+    }
+
     await session.commitTransaction();
-    
+
     res.status(200).json({
       success: true,
       data: {
@@ -497,9 +607,9 @@ exports.cancelSale = async (req, res, next) => {
         saleNumber: sale.saleNumber,
         status: sale.status,
         cancelledAt: new Date(),
-        reason
+        reason,
       },
-      message: 'Sale cancelled successfully'
+      message: "Sale cancelled successfully",
     });
   } catch (error) {
     await session.abortTransaction();
@@ -514,73 +624,73 @@ exports.cancelSale = async (req, res, next) => {
 // @access  Private
 exports.getSalesSummary = async (req, res, next) => {
   try {
-    const { startDate, endDate, groupBy = 'day' } = req.query;
-    
+    const { startDate, endDate, groupBy = "day" } = req.query;
+
     if (!startDate || !endDate) {
       return res.status(400).json({
         success: false,
-        message: 'startDate and endDate are required'
+        message: "startDate and endDate are required",
       });
     }
-    
+
     const start = new Date(startDate);
     const end = new Date(endDate);
-    
+
     // Total general
     const total = await Sale.getTotalByPeriod(start, end);
-    
+
     // Ventas agrupadas
     let groupFormat;
-    switch(groupBy) {
-      case 'day':
-        groupFormat = { $dateToString: { format: '%Y-%m-%d', date: '$date' } };
+    switch (groupBy) {
+      case "day":
+        groupFormat = { $dateToString: { format: "%Y-%m-%d", date: "$date" } };
         break;
-      case 'month':
-        groupFormat = { $dateToString: { format: '%Y-%m', date: '$date' } };
+      case "month":
+        groupFormat = { $dateToString: { format: "%Y-%m", date: "$date" } };
         break;
-      case 'week':
-        groupFormat = { $week: '$date' };
+      case "week":
+        groupFormat = { $week: "$date" };
         break;
       default:
-        groupFormat = { $dateToString: { format: '%Y-%m-%d', date: '$date' } };
+        groupFormat = { $dateToString: { format: "%Y-%m-%d", date: "$date" } };
     }
-    
+
     const groupedSales = await Sale.aggregate([
       {
         $match: {
           date: { $gte: start, $lte: end },
-          status: 'completed'
-        }
+          status: "completed",
+        },
       },
       {
         $group: {
           _id: groupFormat,
-          total: { $sum: '$total' },
+          total: { $sum: "$total" },
           count: { $sum: 1 },
-          average: { $avg: '$total' }
-        }
+          average: { $avg: "$total" },
+        },
       },
-      { $sort: { _id: 1 } }
+      { $sort: { _id: 1 } },
     ]);
-    
+
     // Ventas por método de pago
     const paymentsByMethod = await Sale.aggregate([
       {
         $match: {
           date: { $gte: start, $lte: end },
-          status: 'completed'
-        }
+          status: "completed",
+        },
       },
-      { $unwind: '$payments' },
+      { $unwind: "$payments" },
       {
         $group: {
-          _id: '$payments.method',
-          total: { $sum: '$payments.amount' },
-          count: { $sum: 1 }
-        }
-      }
+          _id: "$payments.method",
+          total: { $sum: "$payments.amount" },
+          count: { $sum: 1 },
+        },
+      },
     ]);
-    
+
     res.status(200).json({
       success: true,
       data: {
@@ -590,8 +700,8 @@ exports.getSalesSummary = async (req, res, next) => {
         averageSale: total.average,
         groupedBy: groupBy,
         groupedSales,
-        paymentsByMethod
-      }
+        paymentsByMethod,
+      },
     });
   } catch (error) {
     next(error);
@@ -604,23 +714,23 @@ exports.getSalesSummary = async (req, res, next) => {
 exports.getTopProducts = async (req, res, next) => {
   try {
     const { startDate, endDate, limit = 10 } = req.query;
-    
+
     if (!startDate || !endDate) {
       return res.status(400).json({
         success: false,
-        message: 'startDate and endDate are required'
+        message: "startDate and endDate are required",
       });
     }
-    
+
     const start = new Date(startDate);
     const end = new Date(endDate);
-    
+
     const topProducts = await Sale.getTopProducts(start, end, parseInt(limit));
-    
+
     res.status(200).json({
       success: true,
       data: topProducts,
-      period: { startDate: start, endDate: end }
+      period: { startDate: start, endDate: end },
     });
   } catch (error) {
     next(error);
@@ -637,47 +747,53 @@ exports.getSaleStats = async (req, res, next) => {
     const startOfWeek = new Date(today);
     startOfWeek.setDate(today.getDate() - today.getDay());
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-    
+
     // Ventas de hoy
     const todaySales = await Sale.getTotalByPeriod(startOfDay, new Date());
-    
+
     // Ventas de la semana
     const weekSales = await Sale.getTotalByPeriod(startOfWeek, new Date());
-    
+
     // Ventas del mes
     const monthSales = await Sale.getTotalByPeriod(startOfMonth, new Date());
-    
+
     // Ventas por estado
     const salesByStatus = await Sale.aggregate([
-      { $group: { _id: '$status', count: { $sum: 1 } } }
+      { $group: { _id: "$status", count: { $sum: 1 } } },
     ]);
-    
+
     // Ventas por origen
     const salesByOrigin = await Sale.aggregate([
-      { $group: { _id: '$origin', count: { $sum: 1 }, total: { $sum: '$total' } } }
+      {
+        $group: {
+          _id: "$origin",
+          count: { $sum: 1 },
+          total: { $sum: "$total" },
+        },
+      },
     ]);
-    
+
     res.status(200).json({
       success: true,
       data: {
         today: {
           total: todaySales.total,
           count: todaySales.count,
-          average: todaySales.average
+          average: todaySales.average,
         },
         thisWeek: {
           total: weekSales.total,
           count: weekSales.count,
-          average: weekSales.average
+          average: weekSales.average,
         },
         thisMonth: {
           total: monthSales.total,
           count: monthSales.count,
-          average: monthSales.average
+          average: monthSales.average,
         },
         salesByStatus,
-        salesByOrigin
-      }
+        salesByOrigin,
+      },
     });
   } catch (error) {
     next(error);

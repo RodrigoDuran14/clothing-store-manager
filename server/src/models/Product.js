@@ -59,6 +59,11 @@ const productSchema = new mongoose.Schema({
     ref: 'Supplier',
     required: [true, 'Supplier is required']
   },
+  partnerId: {  // Socio dueño de este producto (override de categoría)
+  type: mongoose.Schema.Types.ObjectId,
+  ref: 'Partner',
+  default: null
+  },
   variants: [variantSchema],  // Variantes del producto
   price: {  // Precio de venta
     type: Number,

@@ -8,11 +8,11 @@ const {
   validateUpdateClient,
   validateEnableCredit,
   validateCreditPayment,
-  validateAddAddress,           // Nuevo validador
-  validateUpdateAddress,        // Nuevo validador
-  validateUpdatePreferences,    // Nuevo validador
-  validateGetPurchaseHistory,   // Nuevo validador
-  validateGetCreditRisk         // Nuevo validador
+  validateAddAddress,
+  validateUpdateAddress,
+  validateUpdatePreferences,
+  validateGetPurchaseHistory,
+  validateGetCreditRisk
 } = require('../validators/clientValidator');
 
 // ============================================
@@ -82,6 +82,12 @@ router.post('/:id/credit/payment', isAdmin, validateCreditPayment, clientControl
 router.get('/:id/credit/summary', clientController.getCreditSummary);
 
 // ============================================
+// NUEVO: VERIFICAR LÍMITE DE CRÉDITO
+// ============================================
+// Verificar si el cliente tiene crédito disponible para un monto - acceso general autenticado
+router.get('/:id/credit/check', clientController.checkCreditLimit);
+
+// ============================================
 // HISTORIAL DE COMPRAS
 // ============================================
 
@@ -93,4 +99,4 @@ router.get('/:id/purchases', validateGetPurchaseHistory, clientController.getPur
 // para evitar conflictos con rutas específicas
 // ============================================
 
-module.exports = router;
+module.exports = router; 
