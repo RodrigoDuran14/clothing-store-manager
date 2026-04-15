@@ -6,29 +6,63 @@ const { isAdmin } = require('../middleware/role');
 const {
   validateCreateCategory,
   validateUpdateCategory,
-  validateReorderCategories
+  validateReorderCategories,
+  validateGetCategories,
+  validateGetCategoryById,
+  validateDeleteCategory,
+  validateGetSubcategories,
+  validateGetBreadcrumb,
+  validateToggleStatus
 } = require('../validators/categoryValidator');
 
-// Todas las rutas requieren autenticación
+// ============================================
+// TODAS LAS RUTAS REQUIEREN AUTENTICACIÓN
+// ============================================
 router.use(protect);
 
-// Estadísticas
+// ============================================
+// ESTADÍSTICAS Y REPORTES
+// ============================================
 router.get('/stats', categoryController.getCategoryStats);
 
-// Reordenar categorías
+// ============================================
+// REORDENAR CATEGORÍAS (acción especial)
+// ============================================
 router.put('/reorder', isAdmin, validateReorderCategories, categoryController.reorderCategories);
 
-// Rutas principales
+// ============================================
+// RUTAS PRINCIPALES DE CATEGORÍAS
+// ============================================
+
+// Obtener todas las categorías (GET) - acceso general autenticado
+// Crear nueva categoría (POST) - solo admin
 router.route('/')
-  .get(categoryController.getCategories)
+  .get(validateGetCategories, categoryController.getCategories)
   .post(isAdmin, validateCreateCategory, categoryController.createCategory);
 
+// Obtener, actualizar o eliminar una categoría específica
+// GET - acceso general autenticado
+// PUT - solo admin
+// DELETE - solo admin (soft delete)
 router.route('/:id')
-  .get(categoryController.getCategoryById)
+  .get(validateGetCategoryById, categoryController.getCategoryById)
   .put(isAdmin, validateUpdateCategory, categoryController.updateCategory)
-  .delete(isAdmin, categoryController.deleteCategory);
+  .delete(isAdmin, validateDeleteCategory, categoryController.deleteCategory);
 
-// Eliminación permanente
-router.delete('/:id/permanent', isAdmin, categoryController.permanentDeleteCategory);
+// ============================================
+// OPERACIONES ESPECIALES POR ID
+// ============================================
+
+// Obtener subcategorías de una categoría
+router.get('/:id/subcategories', validateGetSubcategories, categoryController.getSubcategories);
+
+// Obtener breadcrumb (ruta de navegación) de una categoría
+router.get('/:id/breadcrumb', validateGetBreadcrumb, categoryController.getCategoryBreadcrumb);
+
+// Activar/Desactivar categoría (toggle)
+router.patch('/:id/toggle-status', isAdmin, validateToggleStatus, categoryController.toggleCategoryStatus);
+
+// Eliminación permanente (peligroso, solo admin)
+router.delete('/:id/permanent', isAdmin, validateDeleteCategory, categoryController.permanentDeleteCategory);
 
 module.exports = router;

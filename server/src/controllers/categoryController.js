@@ -7,9 +7,9 @@ const { filterObj, paginate, formatPagination } = require('../utils/helpers');
 // @access  Private
 exports.getCategories = async (req, res, next) => {
   try {
-    const { pagina = 1, limite = 10, activo, tree, forSelect } = req.query;
+    const { page = 1, limit = 10, isActive, tree, forSelect } = req.query;
     
-    // Si solicita el árbol de categorías
+    // Si solicita el árbol de categorías (estructura jerárquica completa)
     if (tree === 'true') {
       const categoryTree = await Category.getCategoryTree();
       return res.status(200).json({
@@ -18,41 +18,41 @@ exports.getCategories = async (req, res, next) => {
       });
     }
     
-    // Si solicita para select (formularios)
+    // Si solicita opciones para select (formularios con formato plano)
     if (forSelect === 'true') {
-      const options = await Category.getForSelect(activo === 'false');
+      const options = await Category.getForSelect(isActive === 'false');
       return res.status(200).json({
         success: true,
         data: options
       });
     }
     
-    // Paginación normal
+    // Paginación normal de categorías
     const filter = {};
-    if (activo !== undefined) filter.activo = activo === 'true';
+    if (isActive !== undefined) filter.isActive = isActive === 'true';
     
-    const { skip, limit, page } = paginate(pagina, limite);
+    const { skip, limit: limitValue, page: currentPage } = paginate(page, limit);
     
     const categories = await Category.find(filter)
-      .populate('padre_id', 'nombre nivel')
-      .sort({ nivel: 1, orden: 1, nombre: 1 })
+      .populate('parentId', 'name level slug')
+      .sort({ level: 1, order: 1, name: 1 })
       .skip(skip)
-      .limit(limit);
+      .limit(limitValue);
     
-    // Contar subcategorías para cada categoría
+    // Contar subcategorías y productos para cada categoría
     const categoriesWithCount = await Promise.all(categories.map(async (cat) => {
-      const subcategoriasCount = await Category.countDocuments({ padre_id: cat._id });
-      const productosCount = await Product.countDocuments({ categoria_id: cat._id, activo: true });
+      const subcategoriesCount = await Category.countDocuments({ parentId: cat._id });
+      const productsCount = await Product.countDocuments({ categoryId: cat._id, isActive: true });
       
       return {
         ...cat.toObject(),
-        subcategoriasCount,
-        productosCount
+        subcategoriesCount,
+        productsCount
       };
     }));
     
     const total = await Category.countDocuments(filter);
-    const pagination = formatPagination(total, page, limit);
+    const pagination = formatPagination(total, currentPage, limitValue);
     
     res.status(200).json({
       success: true,
@@ -70,7 +70,7 @@ exports.getCategories = async (req, res, next) => {
 exports.getCategoryById = async (req, res, next) => {
   try {
     const category = await Category.findById(req.params.id)
-      .populate('padre_id', 'nombre nivel slug');
+      .populate('parentId', 'name level slug');
     
     if (!category) {
       return res.status(404).json({
@@ -79,20 +79,20 @@ exports.getCategoryById = async (req, res, next) => {
       });
     }
     
-    // Obtener subcategorías
-    const subcategorias = await Category.find({ 
-      padre_id: category._id, 
-      activo: true 
-    }).sort({ orden: 1, nombre: 1 });
+    // Obtener subcategorías activas
+    const subcategories = await Category.find({ 
+      parentId: category._id, 
+      isActive: true 
+    }).sort({ order: 1, name: 1 });
     
-    // Obtener breadcrumb
+    // Obtener breadcrumb (ruta de navegación)
     const breadcrumb = await category.getBreadcrumb();
     
     res.status(200).json({
       success: true,
       data: {
         ...category.toObject(),
-        subcategorias,
+        subcategories,
         breadcrumb
       }
     });
@@ -106,11 +106,11 @@ exports.getCategoryById = async (req, res, next) => {
 // @access  Private/Admin
 exports.createCategory = async (req, res, next) => {
   try {
-    const { nombre, descripcion, imagen, padre_id, orden, destacada, icono } = req.body;
+    const { name, description, image, parentId, order, isFeatured, icon } = req.body;
     
     // Verificar si ya existe una categoría con el mismo nombre
     const existingCategory = await Category.findOne({ 
-      nombre: nombre.toUpperCase() 
+      name: name.toUpperCase() 
     });
     
     if (existingCategory) {
@@ -121,8 +121,8 @@ exports.createCategory = async (req, res, next) => {
     }
     
     // Si tiene padre, verificar que exista
-    if (padre_id) {
-      const parent = await Category.findById(padre_id);
+    if (parentId) {
+      const parent = await Category.findById(parentId);
       if (!parent) {
         return res.status(404).json({
           success: false,
@@ -130,8 +130,8 @@ exports.createCategory = async (req, res, next) => {
         });
       }
       
-      // Verificar nivel máximo
-      if (parent.nivel >= 4) {
+      // Verificar nivel máximo (5 niveles permitidos, level 0-4, máximo 4 como padre)
+      if (parent.level >= 4) {
         return res.status(400).json({
           success: false,
           message: 'No se pueden crear más de 5 niveles de categorías'
@@ -140,13 +140,13 @@ exports.createCategory = async (req, res, next) => {
     }
     
     const category = await Category.create({
-      nombre: nombre.toUpperCase(),
-      descripcion,
-      imagen: imagen || 'https://via.placeholder.com/150',
-      padre_id: padre_id || null,
-      orden: orden || 0,
-      destacada: destacada || false,
-      icono: icono || ''
+      name: name.toUpperCase(),
+      description,
+      image: image || 'https://via.placeholder.com/150',
+      parentId: parentId || null,
+      order: order || 0,
+      isFeatured: isFeatured || false,
+      icon: icon || ''
     });
     
     res.status(201).json({
@@ -164,14 +164,14 @@ exports.createCategory = async (req, res, next) => {
 // @access  Private/Admin
 exports.updateCategory = async (req, res, next) => {
   try {
-    const allowedFields = ['nombre', 'descripcion', 'imagen', 'padre_id', 'orden', 'activo', 'destacada', 'icono'];
+    const allowedFields = ['name', 'description', 'image', 'parentId', 'order', 'isActive', 'isFeatured', 'icon'];
     const filteredBody = filterObj(req.body, ...allowedFields);
     
     // Si está cambiando el nombre, verificar que no exista otra con el mismo
-    if (filteredBody.nombre) {
-      filteredBody.nombre = filteredBody.nombre.toUpperCase();
+    if (filteredBody.name) {
+      filteredBody.name = filteredBody.name.toUpperCase();
       const existingCategory = await Category.findOne({ 
-        nombre: filteredBody.nombre,
+        name: filteredBody.name,
         _id: { $ne: req.params.id }
       });
       
@@ -184,26 +184,26 @@ exports.updateCategory = async (req, res, next) => {
     }
     
     // Si cambia el padre, verificar que no se cree un ciclo
-    if (filteredBody.padre_id) {
+    if (filteredBody.parentId) {
       // No puede ser su propio padre
-      if (filteredBody.padre_id === req.params.id) {
+      if (filteredBody.parentId === req.params.id) {
         return res.status(400).json({
           success: false,
           message: 'Una categoría no puede ser padre de sí misma'
         });
       }
       
-      // Verificar que el padre no sea un descendiente
+      // Verificar que el padre no sea un descendiente (evitar ciclos)
       const category = await Category.findById(req.params.id);
       if (category) {
         const checkDescendant = async (parentId, targetId) => {
           if (!parentId) return false;
           if (parentId.toString() === targetId.toString()) return true;
           const parent = await Category.findById(parentId);
-          return parent ? checkDescendant(parent.padre_id, targetId) : false;
+          return parent ? checkDescendant(parent.parentId, targetId) : false;
         };
         
-        const isDescendant = await checkDescendant(filteredBody.padre_id, req.params.id);
+        const isDescendant = await checkDescendant(filteredBody.parentId, req.params.id);
         if (isDescendant) {
           return res.status(400).json({
             success: false,
@@ -263,7 +263,7 @@ exports.deleteCategory = async (req, res, next) => {
     }
     
     // Verificar si tiene subcategorías
-    const hasSubcategories = await Category.countDocuments({ padre_id: category._id });
+    const hasSubcategories = await Category.countDocuments({ parentId: category._id });
     if (hasSubcategories > 0) {
       return res.status(400).json({
         success: false,
@@ -271,8 +271,8 @@ exports.deleteCategory = async (req, res, next) => {
       });
     }
     
-    // Soft delete
-    category.activo = false;
+    // Soft delete - solo desactivar
+    category.isActive = false;
     await category.save();
     
     res.status(200).json({
@@ -308,7 +308,7 @@ exports.permanentDeleteCategory = async (req, res, next) => {
     }
     
     // Verificar si tiene subcategorías
-    const hasSubcategories = await Category.countDocuments({ padre_id: category._id });
+    const hasSubcategories = await Category.countDocuments({ parentId: category._id });
     if (hasSubcategories > 0) {
       return res.status(400).json({
         success: false,
@@ -332,7 +332,7 @@ exports.permanentDeleteCategory = async (req, res, next) => {
 // @access  Private/Admin
 exports.reorderCategories = async (req, res, next) => {
   try {
-    const { categories } = req.body; // Array de { id, orden }
+    const { categories } = req.body; // Array de { id, order }
     
     if (!Array.isArray(categories)) {
       return res.status(400).json({
@@ -341,8 +341,9 @@ exports.reorderCategories = async (req, res, next) => {
       });
     }
     
+    // Actualizar el orden de cada categoría
     for (const item of categories) {
-      await Category.findByIdAndUpdate(item.id, { orden: item.orden });
+      await Category.findByIdAndUpdate(item.id, { order: item.order });
     }
     
     res.status(200).json({
@@ -360,31 +361,45 @@ exports.reorderCategories = async (req, res, next) => {
 exports.getCategoryStats = async (req, res, next) => {
   try {
     const totalCategories = await Category.countDocuments();
-    const activeCategories = await Category.countDocuments({ activo: true });
+    const activeCategories = await Category.countDocuments({ isActive: true });
     const inactiveCategories = totalCategories - activeCategories;
-    const destacadas = await Category.countDocuments({ destacada: true });
+    const featuredCategories = await Category.countDocuments({ isFeatured: true });
     
-    // Categorías con más productos
-    const categoriesWithProducts = await Category.aggregate([
+    // Categorías con más productos (top 5)
+    const categoriesWithMostProducts = await Category.aggregate([
       {
         $lookup: {
           from: 'products',
           localField: '_id',
-          foreignField: 'categoria_id',
-          as: 'productos'
+          foreignField: 'categoryId',
+          as: 'products'
         }
       },
       {
         $project: {
-          nombre: 1,
-          totalProductos: { $size: '$productos' }
+          name: 1,
+          level: 1,
+          totalProducts: { $size: '$products' }
         }
       },
       {
-        $sort: { totalProductos: -1 }
+        $sort: { totalProducts: -1 }
       },
       {
         $limit: 5
+      }
+    ]);
+    
+    // Distribución por nivel
+    const levelDistribution = await Category.aggregate([
+      {
+        $group: {
+          _id: '$level',
+          count: { $sum: 1 }
+        }
+      },
+      {
+        $sort: { _id: 1 }
       }
     ]);
     
@@ -392,11 +407,95 @@ exports.getCategoryStats = async (req, res, next) => {
       success: true,
       data: {
         total: totalCategories,
-        activas: activeCategories,
-        inactivas: inactiveCategories,
-        destacadas,
-        categoriasConMasProductos: categoriesWithProducts
+        active: activeCategories,
+        inactive: inactiveCategories,
+        featured: featuredCategories,
+        categoriesWithMostProducts,
+        levelDistribution
       }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Obtener subcategorías de una categoría
+// @route   GET /api/categories/:id/subcategories
+// @access  Private
+exports.getSubcategories = async (req, res, next) => {
+  try {
+    const category = await Category.findById(req.params.id);
+    
+    if (!category) {
+      return res.status(404).json({
+        success: false,
+        message: 'Categoría no encontrada'
+      });
+    }
+    
+    const subcategories = await Category.find({ 
+      parentId: category._id,
+      isActive: true 
+    }).sort({ order: 1, name: 1 });
+    
+    res.status(200).json({
+      success: true,
+      data: subcategories,
+      total: subcategories.length
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Obtener breadcrumb de una categoría
+// @route   GET /api/categories/:id/breadcrumb
+// @access  Private
+exports.getCategoryBreadcrumb = async (req, res, next) => {
+  try {
+    const category = await Category.findById(req.params.id);
+    
+    if (!category) {
+      return res.status(404).json({
+        success: false,
+        message: 'Categoría no encontrada'
+      });
+    }
+    
+    const breadcrumb = await category.getBreadcrumb();
+    
+    res.status(200).json({
+      success: true,
+      data: breadcrumb
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Activar/Desactivar categoría
+// @route   PATCH /api/categories/:id/toggle-status
+// @access  Private/Admin
+exports.toggleCategoryStatus = async (req, res, next) => {
+  try {
+    const category = await Category.findById(req.params.id);
+    
+    if (!category) {
+      return res.status(404).json({
+        success: false,
+        message: 'Categoría no encontrada'
+      });
+    }
+    
+    category.isActive = !category.isActive;
+    await category.save();
+    
+    res.status(200).json({
+      success: true,
+      data: {
+        isActive: category.isActive
+      },
+      message: `Categoría ${category.isActive ? 'activada' : 'desactivada'} exitosamente`
     });
   } catch (error) {
     next(error);

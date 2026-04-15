@@ -1,51 +1,51 @@
 const mongoose = require('mongoose');
 
 const categorySchema = new mongoose.Schema({
-  nombre: {
+  name: {  // Nombre de la categoría
     type: String,
-    required: [true, 'El nombre de la categoría es obligatorio'],
+    required: [true, 'Category name is required'],
     unique: true,
     trim: true,
     uppercase: true,
-    maxlength: [50, 'El nombre no puede exceder 50 caracteres']
+    maxlength: [50, 'Name cannot exceed 50 characters']
   },
-  descripcion: {
+  description: {  // Descripción
     type: String,
     trim: true,
-    maxlength: [200, 'La descripción no puede exceder 200 caracteres']
+    maxlength: [200, 'Description cannot exceed 200 characters']
   },
-  imagen: {
+  image: {  // URL de la imagen
     type: String,
     default: 'https://via.placeholder.com/150'
   },
-  padre_id: {
+  parentId: {  // ID de categoría padre (para subcategorías)
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Category',
     default: null
   },
-  nivel: {
+  level: {  // Nivel en el árbol (0 = raíz)
     type: Number,
     default: 0,
     min: 0,
     max: 5
   },
-  orden: {
+  order: {  // Orden de visualización
     type: Number,
     default: 0
   },
-  activo: {
+  isActive: {  // Si está activa
     type: Boolean,
     default: true
   },
-  destacada: {
+  isFeatured: {  // Si es destacada
     type: Boolean,
     default: false
   },
-  icono: {
+  icon: {  // Clase de icono (FontAwesome, Material Icons, etc.)
     type: String,
-    default: '' // Clase de icono (FontAwesome, Material Icons, etc.)
+    default: ''
   },
-  slug: {
+  slug: {  // URL amigable
     type: String,
     unique: true,
     lowercase: true,
@@ -58,28 +58,28 @@ const categorySchema = new mongoose.Schema({
 });
 
 // Índices para búsquedas rápidas
-categorySchema.index({ nombre: 1 });
-categorySchema.index({ padre_id: 1 });
-categorySchema.index({ nivel: 1 });
+categorySchema.index({ name: 1 });
+categorySchema.index({ parentId: 1 });
+categorySchema.index({ level: 1 });
 categorySchema.index({ slug: 1 });
-categorySchema.index({ activo: 1 });
+categorySchema.index({ isActive: 1 });
 
 // Virtual: subcategorías
-categorySchema.virtual('subcategorias', {
+categorySchema.virtual('subcategories', {
   ref: 'Category',
   localField: '_id',
-  foreignField: 'padre_id'
+  foreignField: 'parentId'
 });
 
 // Virtual: ruta completa
-categorySchema.virtual('rutaCompleta').get(function() {
+categorySchema.virtual('fullPath').get(function() {
   return `/${this.slug}`;
 });
 
 // Middleware: generar slug antes de guardar
 categorySchema.pre('save', function(next) {
-  if (this.isModified('nombre')) {
-    this.slug = this.nombre
+  if (this.isModified('name')) {
+    this.slug = this.name
       .toLowerCase()
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '') // Eliminar acentos
@@ -91,21 +91,21 @@ categorySchema.pre('save', function(next) {
 
 // Middleware: validar que no se pueda crear una categoría padre de sí misma
 categorySchema.pre('save', async function(next) {
-  if (this.padre_id && this.padre_id.equals(this._id)) {
-    next(new Error('Una categoría no puede ser padre de sí misma'));
+  if (this.parentId && this.parentId.equals(this._id)) {
+    next(new Error('A category cannot be its own parent'));
   }
   
   // Calcular nivel basado en el padre
-  if (this.padre_id) {
-    const parent = await mongoose.model('Category').findById(this.padre_id);
+  if (this.parentId) {
+    const parent = await mongoose.model('Category').findById(this.parentId);
     if (parent) {
-      this.nivel = parent.nivel + 1;
-      if (this.nivel > 5) {
-        next(new Error('Máximo 5 niveles de profundidad permitidos'));
+      this.level = parent.level + 1;
+      if (this.level > 5) {
+        next(new Error('Maximum 5 levels of depth allowed'));
       }
     }
   } else {
-    this.nivel = 0;
+    this.level = 0;
   }
   
   next();
@@ -113,19 +113,19 @@ categorySchema.pre('save', async function(next) {
 
 // Método estático: obtener árbol de categorías
 categorySchema.statics.getCategoryTree = async function() {
-  const categories = await this.find({ activo: true }).sort({ orden: 1, nombre: 1 });
+  const categories = await this.find({ isActive: true }).sort({ order: 1, name: 1 });
   
   const buildTree = (parentId = null) => {
     return categories
       .filter(cat => {
         if (parentId === null) {
-          return !cat.padre_id;
+          return !cat.parentId;
         }
-        return cat.padre_id && cat.padre_id.toString() === parentId.toString();
+        return cat.parentId && cat.parentId.toString() === parentId.toString();
       })
       .map(cat => ({
         ...cat.toObject(),
-        subcategorias: buildTree(cat._id)
+        children: buildTree(cat._id)
       }));
   };
   
@@ -134,21 +134,21 @@ categorySchema.statics.getCategoryTree = async function() {
 
 // Método estático: obtener categorías para select (formularios)
 categorySchema.statics.getForSelect = async function(includeInactive = false) {
-  const filter = includeInactive ? {} : { activo: true };
-  const categories = await this.find(filter).sort({ nivel: 1, orden: 1, nombre: 1 });
+  const filter = includeInactive ? {} : { isActive: true };
+  const categories = await this.find(filter).sort({ level: 1, order: 1, name: 1 });
   
   const formatOptions = (items, prefix = '') => {
     const options = [];
     for (const cat of items) {
       options.push({
         value: cat._id,
-        label: `${prefix}${cat.nombre}`,
-        nivel: cat.nivel,
-        activo: cat.activo
+        label: `${prefix}${cat.name}`,
+        level: cat.level,
+        isActive: cat.isActive
       });
       
-      if (cat.subcategorias && cat.subcategorias.length > 0) {
-        options.push(...formatOptions(cat.subcategorias, `${prefix}-- `));
+      if (cat.subcategories && cat.subcategories.length > 0) {
+        options.push(...formatOptions(cat.subcategories, `${prefix}-- `));
       }
     }
     return options;
@@ -161,7 +161,7 @@ categorySchema.statics.getForSelect = async function(includeInactive = false) {
 // Método de instancia: verificar si tiene productos asociados
 categorySchema.methods.hasProducts = async function() {
   const Product = mongoose.model('Product');
-  const count = await Product.countDocuments({ categoria_id: this._id, activo: true });
+  const count = await Product.countDocuments({ categoryId: this._id, isActive: true });
   return count > 0;
 };
 
@@ -169,12 +169,12 @@ categorySchema.methods.hasProducts = async function() {
 categorySchema.methods.getBreadcrumb = async function() {
   const breadcrumb = [{
     _id: this._id,
-    nombre: this.nombre,
+    name: this.name,
     slug: this.slug
   }];
   
-  if (this.padre_id) {
-    const parent = await mongoose.model('Category').findById(this.padre_id);
+  if (this.parentId) {
+    const parent = await mongoose.model('Category').findById(this.parentId);
     if (parent) {
       const parentBreadcrumb = await parent.getBreadcrumb();
       return [...parentBreadcrumb, ...breadcrumb];

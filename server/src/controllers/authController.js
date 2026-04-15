@@ -29,10 +29,10 @@ exports.register = async (req, res, next) => {
 
     // Crear usuario (los admins solo pueden crearse manualmente en BD)
     const user = await User.create({
-      nombre,
+      name,
       email,
       password,
-      telefono,
+      phone,
       admin: false, // Por defecto no es admin
     });
 
@@ -69,7 +69,7 @@ exports.login = async (req, res, next) => {
     }
 
     // Verificar si el usuario está activo
-    if (!user.activo) {
+    if (!user.isActive) {
       return res.status(401).json({
         success: false,
         message: "Tu cuenta está desactivada. Contacta al administrador",
@@ -77,7 +77,7 @@ exports.login = async (req, res, next) => {
     }
 
     // Actualizar último login
-    user.ultimoLogin = Date.now();
+    user.lastLogin = Date.now();
     await user.save({ validateBeforeSave: false });
 
     createSendToken(user, 200, res);
@@ -116,7 +116,7 @@ exports.updateMe = async (req, res, next) => {
     }
 
     // Campos permitidos
-    const allowedFields = ["nombre", "telefono", "imagen"];
+    const allowedFields = ["name", "phone", "image"];
     const updates = {};
 
     Object.keys(req.body).forEach((key) => {

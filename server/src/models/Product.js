@@ -1,121 +1,122 @@
 const mongoose = require('mongoose');
 
+// Esquema para variantes de producto (talle, color, stock)
 const variantSchema = new mongoose.Schema({
-  talle: {
+  size: {  // Talle
     type: String,
-    required: [true, 'El talle es obligatorio'],
+    required: [true, 'Size is required'],
     trim: true,
     uppercase: true
   },
-  color: {
+  color: {  // Color
     type: String,
-    required: [true, 'El color es obligatorio'],
+    required: [true, 'Color is required'],
     trim: true
   },
-  colorCodigo: {
+  colorCode: {  // Código hexadecimal del color (opcional)
     type: String,
     trim: true,
-    default: '' // Código hexadecimal del color (opcional)
+    default: ''
   },
   stock: {
     type: Number,
     required: true,
     default: 0,
-    min: [0, 'El stock no puede ser negativo']
+    min: [0, 'Stock cannot be negative']
   },
-  stockMinimo: {
+  minStock: {  // Stock mínimo para alertas
     type: Number,
     default: 5,
-    min: [0, 'El stock mínimo no puede ser negativo']
+    min: [0, 'Minimum stock cannot be negative']
   },
-  sku: {
+  sku: {  // Stock Keeping Unit
     type: String,
     unique: true,
-    sparse: true // Permite valores null
+    sparse: true
   }
 });
 
 const productSchema = new mongoose.Schema({
-  nombre: {
+  name: {  // Nombre del producto
     type: String,
-    required: [true, 'El nombre del producto es obligatorio'],
+    required: [true, 'Product name is required'],
     trim: true,
-    maxlength: [200, 'El nombre no puede exceder 200 caracteres'],
+    maxlength: [200, 'Name cannot exceed 200 characters'],
     index: true
   },
-  descripcion: {
+  description: {  // Descripción
     type: String,
     trim: true,
-    maxlength: [2000, 'La descripción no puede exceder 2000 caracteres']
+    maxlength: [2000, 'Description cannot exceed 2000 characters']
   },
-  categoria_id: {
+  categoryId: {  // ID de categoría
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Category',
-    required: [true, 'La categoría es obligatoria']
+    required: [true, 'Category is required']
   },
-  proveedor_id: {
+  supplierId: {  // ID de proveedor
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Supplier',
-    required: [true, 'El proveedor es obligatorio']
+    required: [true, 'Supplier is required']
   },
-  variantes: [variantSchema],
-  precio: {
+  variants: [variantSchema],  // Variantes del producto
+  price: {  // Precio de venta
     type: Number,
-    required: [true, 'El precio es obligatorio'],
-    min: [0, 'El precio no puede ser negativo']
+    required: [true, 'Price is required'],
+    min: [0, 'Price cannot be negative']
   },
-  precioWeb: {
+  webPrice: {  // Precio para ecommerce
     type: Number,
-    min: [0, 'El precio web no puede ser negativo'],
+    min: [0, 'Web price cannot be negative'],
     default: function() {
-      return this.precio; // Por defecto igual al precio normal
+      return this.price;
     }
   },
-  costo: {
+  cost: {  // Costo del producto
     type: Number,
-    required: [true, 'El costo es obligatorio'],
-    min: [0, 'El costo no puede ser negativo']
+    required: [true, 'Cost is required'],
+    min: [0, 'Cost cannot be negative']
   },
-  codigo_barra: {
+  barcode: {  // Código de barras
     type: String,
     unique: true,
     sparse: true,
     trim: true
   },
-  imagenes: [{
+  images: [{  // Imágenes del producto
     url: String,
-    public_id: String,
-    principal: {
+    publicId: String,
+    isMain: {  // Si es la imagen principal
       type: Boolean,
       default: false
     }
   }],
-  activo: {
+  isActive: {  // Si el producto está activo
     type: Boolean,
     default: true
   },
-  destacado: {
+  isFeatured: {  // Si es producto destacado
     type: Boolean,
     default: false
   },
-  visibleWeb: {
+  isVisibleOnWeb: {  // Visible en ecommerce
     type: Boolean,
     default: true
   },
-  pesoKg: {
+  weightKg: {  // Peso en kilogramos
     type: Number,
     default: 0,
     min: 0
   },
-  etiquetas: [{
+  tags: [{  // Etiquetas para búsqueda
     type: String,
     trim: true
   }],
-  fecha_creacion: {
+  createdAt: {
     type: Date,
     default: Date.now
   },
-  ultimaActualizacion: {
+  updatedAt: {
     type: Date,
     default: Date.now
   }
@@ -126,38 +127,38 @@ const productSchema = new mongoose.Schema({
 });
 
 // Índices para búsquedas rápidas
-productSchema.index({ nombre: 'text', descripcion: 'text' });
-productSchema.index({ categoria_id: 1 });
-productSchema.index({ proveedor_id: 1 });
-productSchema.index({ 'variantes.sku': 1 });
-productSchema.index({ codigo_barra: 1 });
-productSchema.index({ precio: 1 });
-productSchema.index({ activo: 1, visibleWeb: 1 });
+productSchema.index({ name: 'text', description: 'text' });
+productSchema.index({ categoryId: 1 });
+productSchema.index({ supplierId: 1 });
+productSchema.index({ 'variants.sku': 1 });
+productSchema.index({ barcode: 1 });
+productSchema.index({ price: 1 });
+productSchema.index({ isActive: 1, isVisibleOnWeb: 1 });
 
 // Virtual: stock total sumando todas las variantes
-productSchema.virtual('stockTotal').get(function() {
-  if (!this.variantes || this.variantes.length === 0) return 0;
-  return this.variantes.reduce((total, variante) => total + variante.stock, 0);
+productSchema.virtual('totalStock').get(function() {
+  if (!this.variants || this.variants.length === 0) return 0;
+  return this.variants.reduce((total, variant) => total + variant.stock, 0);
 });
 
-// Virtual: margen de ganancia
-productSchema.virtual('margenGanancia').get(function() {
-  if (this.costo === 0) return 100;
-  return ((this.precio - this.costo) / this.costo) * 100;
+// Virtual: margen de ganancia porcentual
+productSchema.virtual('profitMargin').get(function() {
+  if (this.cost === 0) return 100;
+  return ((this.price - this.cost) / this.cost) * 100;
 });
 
 // Middleware: actualizar fecha antes de guardar
 productSchema.pre('save', function(next) {
-  this.ultimaActualizacion = Date.now();
+  this.updatedAt = Date.now();
   
   // Generar SKU automático para variantes si no tienen
-  if (this.variantes && this.variantes.length > 0) {
-    this.variantes.forEach((variante, index) => {
-      if (!variante.sku) {
-        const nombreAbrev = this.nombre.substring(0, 3).toUpperCase();
-        const talleAbrev = variante.talle.substring(0, 2).toUpperCase();
-        const colorAbrev = variante.color.substring(0, 3).toUpperCase();
-        variante.sku = `${nombreAbrev}-${talleAbrev}-${colorAbrev}-${index + 1}`;
+  if (this.variants && this.variants.length > 0) {
+    this.variants.forEach((variant, index) => {
+      if (!variant.sku) {
+        const nameAbbr = this.name.substring(0, 3).toUpperCase();
+        const sizeAbbr = variant.size.substring(0, 2).toUpperCase();
+        const colorAbbr = variant.color.substring(0, 3).toUpperCase();
+        variant.sku = `${nameAbbr}-${sizeAbbr}-${colorAbbr}-${index + 1}`;
       }
     });
   }
@@ -165,75 +166,75 @@ productSchema.pre('save', function(next) {
   next();
 });
 
-// Método para verificar stock de una variante específica
-productSchema.methods.checkStock = function(talle, color, cantidad) {
-  const variante = this.variantes.find(
-    v => v.talle === talle && v.color === color
+// Método: verificar stock de una variante específica
+productSchema.methods.checkStock = function(size, color, quantity) {
+  const variant = this.variants.find(
+    v => v.size === size && v.color === color
   );
   
-  if (!variante) {
-    return { disponible: false, mensaje: 'Variante no encontrada' };
+  if (!variant) {
+    return { available: false, message: 'Variant not found' };
   }
   
-  if (variante.stock < cantidad) {
+  if (variant.stock < quantity) {
     return { 
-      disponible: false, 
-      mensaje: `Stock insuficiente. Disponible: ${variante.stock}`,
-      stockDisponible: variante.stock
+      available: false, 
+      message: `Insufficient stock. Available: ${variant.stock}`,
+      availableStock: variant.stock
     };
   }
   
-  return { disponible: true, stockDisponible: variante.stock };
+  return { available: true, availableStock: variant.stock };
 };
 
-// Método para actualizar stock
-productSchema.methods.updateStock = async function(talle, color, cantidad, tipo = 'venta') {
-  const variante = this.variantes.find(
-    v => v.talle === talle && v.color === color
+// Método: actualizar stock
+productSchema.methods.updateStock = async function(size, color, quantity, type = 'sale') {
+  const variant = this.variants.find(
+    v => v.size === size && v.color === color
   );
   
-  if (!variante) {
-    throw new Error('Variante no encontrada');
+  if (!variant) {
+    throw new Error('Variant not found');
   }
   
-  if (tipo === 'venta' && variante.stock < cantidad) {
-    throw new Error(`Stock insuficiente para ${this.nombre} - Talle: ${talle}, Color: ${color}`);
+  if (type === 'sale' && variant.stock < quantity) {
+    throw new Error(`Insufficient stock for ${this.name} - Size: ${size}, Color: ${color}`);
   }
   
-  // Actualizar stock
-  if (tipo === 'venta') {
-    variante.stock -= cantidad;
-  } else if (tipo === 'compra' || tipo === 'devolucion') {
-    variante.stock += cantidad;
-  } else if (tipo === 'ajuste') {
-    variante.stock = cantidad;
+  // Actualizar stock según el tipo de operación
+  if (type === 'sale') {
+    variant.stock -= quantity;
+  } else if (type === 'purchase' || type === 'return') {
+    variant.stock += quantity;
+  } else if (type === 'adjustment') {
+    variant.stock = quantity;
   }
   
   await this.save();
-  return variante;
+  return variant;
 };
 
-// Método estático para buscar por código de barras
-productSchema.statics.findByBarcode = function(codigoBarra) {
-  return this.findOne({ codigo_barra: codigoBarra });
+// Método estático: buscar por código de barras
+productSchema.statics.findByBarcode = function(barcode) {
+  return this.findOne({ barcode: barcode });
 };
 
-// Método para obtener productos con stock bajo
+// Método estático: obtener productos con stock bajo
 productSchema.statics.getLowStockProducts = async function() {
-  const products = await this.find({ activo: true });
+  const products = await this.find({ isActive: true });
   
   const lowStock = [];
   for (const product of products) {
-    for (const variante of product.variantes) {
-      if (variante.stock <= variante.stockMinimo) {
+    for (const variant of product.variants) {
+      if (variant.stock <= variant.minStock) {
         lowStock.push({
           productId: product._id,
-          nombre: product.nombre,
-          talle: variante.talle,
-          color: variante.color,
-          stock: variante.stock,
-          stockMinimo: variante.stockMinimo,
-          sku: variante.sku
+          name: product.name,
+          size: variant.size,
+          color: variant.color,
+          stock: variant.stock,
+          minStock: variant.minStock,
+          sku: variant.sku
         });
       }
     }

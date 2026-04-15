@@ -1,4 +1,5 @@
-const User = require('../models/User');
+const User = require('../models/user');
+const bcrypt = require('bcryptjs');
 const { filterObj, paginate, formatPagination } = require('../utils/helpers');
 const { validationResult } = require('express-validator');
 
@@ -7,31 +8,37 @@ const { validationResult } = require('express-validator');
 // @access  Private/Admin
 exports.getUsers = async (req, res, next) => {
   try {
-    const { pagina = 1, limite = 10, activo, admin, search } = req.query;
+    const { 
+      page = 1, 
+      limit = 10, 
+      isActive, 
+      isAdmin, 
+      search 
+    } = req.query;
     
-    // Construir filtro
+    // Construir filtro de búsqueda
     const filter = {};
-    if (activo !== undefined) filter.activo = activo === 'true';
-    if (admin !== undefined) filter.admin = admin === 'true';
+    if (isActive !== undefined) filter.isActive = isActive === 'true';
+    if (isAdmin !== undefined) filter.isAdmin = isAdmin === 'true';
     
     // Búsqueda por nombre o email
     if (search) {
       filter.$or = [
-        { nombre: { $regex: search, $options: 'i' } },
+        { name: { $regex: search, $options: 'i' } },
         { email: { $regex: search, $options: 'i' } }
       ];
     }
     
-    const { skip, limit, page } = paginate(pagina, limite);
+    const { skip, limit: limitValue, page: currentPage } = paginate(page, limit);
     
     const users = await User.find(filter)
       .select('-__v') // Excluir versión
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(limit);
+      .limit(limitValue);
     
     const total = await User.countDocuments(filter);
-    const pagination = formatPagination(total, page, limit);
+    const pagination = formatPagination(total, currentPage, limitValue);
     
     res.status(200).json({
       success: true,
@@ -48,7 +55,8 @@ exports.getUsers = async (req, res, next) => {
 // @access  Private/Admin
 exports.getUserById = async (req, res, next) => {
   try {
-    const user = await User.findById(req.params.id).select('-__v');
+    const user = await User.findById(req.params.id)
+      .select('-__v -password');
     
     if (!user) {
       return res.status(404).json({
@@ -60,6 +68,74 @@ exports.getUserById = async (req, res, next) => {
     res.status(200).json({
       success: true,
       data: user
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Obtener perfil del usuario autenticado
+// @route   GET /api/users/profile
+// @access  Private
+exports.getMyProfile = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user.id)
+      .select('-__v -password');
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Usuario no encontrado'
+      });
+    }
+    
+    res.status(200).json({
+      success: true,
+      data: user
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Actualizar perfil del usuario autenticado
+// @route   PUT /api/users/profile
+// @access  Private
+exports.updateMyProfile = async (req, res, next) => {
+  try {
+    // Campos permitidos para actualización de perfil propio
+    const allowedFields = ['name', 'email', 'phone', 'image'];
+    const filteredBody = filterObj(req.body, ...allowedFields);
+    
+    // Verificar si el email ya existe (si se está actualizando)
+    if (filteredBody.email) {
+      filteredBody.email = filteredBody.email.toLowerCase();
+      const existingUser = await User.findOne({
+        email: filteredBody.email,
+        _id: { $ne: req.user.id }
+      });
+      
+      if (existingUser) {
+        return res.status(400).json({
+          success: false,
+          message: 'Ya existe otro usuario con este email'
+        });
+      }
+    }
+    
+    const user = await User.findByIdAndUpdate(
+      req.user.id,
+      filteredBody,
+      {
+        new: true,
+        runValidators: true
+      }
+    ).select('-__v -password');
+    
+    res.status(200).json({
+      success: true,
+      data: user,
+      message: 'Perfil actualizado exitosamente'
     });
   } catch (error) {
     next(error);
@@ -79,10 +155,10 @@ exports.createUser = async (req, res, next) => {
       });
     }
     
-    const { nombre, email, password, telefono, admin } = req.body;
+    const { name, email, password, phone, isAdmin, image } = req.body;
     
     // Verificar si el email ya existe
-    const userExists = await User.findOne({ email });
+    const userExists = await User.findOne({ email: email.toLowerCase() });
     if (userExists) {
       return res.status(400).json({
         success: false,
@@ -91,11 +167,12 @@ exports.createUser = async (req, res, next) => {
     }
     
     const user = await User.create({
-      nombre,
-      email,
+      name,
+      email: email.toLowerCase(),
       password,
-      telefono,
-      admin: admin || false
+      phone: phone || '',
+      isAdmin: isAdmin || false,
+      image: image || `https://ui-avatars.com/api/?background=0D8F81&color=fff&bold=true&name=${encodeURIComponent(name)}`
     });
     
     // Remover password de la respuesta
@@ -128,13 +205,29 @@ exports.updateUser = async (req, res, next) => {
     if (req.body.password) {
       return res.status(400).json({
         success: false,
-        message: 'Para actualizar contraseña usa la ruta /api/auth/updatepassword'
+        message: 'Para actualizar contraseña usa la ruta /api/auth/update-password'
       });
     }
     
-    // Campos permitidos para actualización
-    const allowedFields = ['nombre', 'email', 'telefono', 'admin', 'activo'];
+    // Campos permitidos para actualización por admin
+    const allowedFields = ['name', 'email', 'phone', 'isAdmin', 'isActive', 'image'];
     const filteredBody = filterObj(req.body, ...allowedFields);
+    
+    // Verificar email único si se está actualizando
+    if (filteredBody.email) {
+      filteredBody.email = filteredBody.email.toLowerCase();
+      const existingUser = await User.findOne({
+        email: filteredBody.email,
+        _id: { $ne: req.params.id }
+      });
+      
+      if (existingUser) {
+        return res.status(400).json({
+          success: false,
+          message: 'Ya existe otro usuario con este email'
+        });
+      }
+    }
     
     const user = await User.findByIdAndUpdate(
       req.params.id,
@@ -143,7 +236,7 @@ exports.updateUser = async (req, res, next) => {
         new: true,
         runValidators: true
       }
-    ).select('-__v');
+    ).select('-__v -password');
     
     if (!user) {
       return res.status(404).json({
@@ -176,25 +269,33 @@ exports.deleteUser = async (req, res, next) => {
       });
     }
     
+    // No permitir desactivar al propio usuario
+    if (user._id.toString() === req.user.id) {
+      return res.status(400).json({
+        success: false,
+        message: 'No puedes desactivar tu propio usuario'
+      });
+    }
+    
     // No permitir eliminar el último admin
-    if (user.admin) {
-      const adminCount = await User.countDocuments({ admin: true });
+    if (user.isAdmin) {
+      const adminCount = await User.countDocuments({ isAdmin: true });
       if (adminCount === 1) {
         return res.status(400).json({
           success: false,
-          message: 'No se puede eliminar el único administrador del sistema'
+          message: 'No se puede desactivar el único administrador del sistema'
         });
       }
     }
     
     // Soft delete: desactivar usuario en lugar de eliminar
-    user.activo = false;
+    user.isActive = false;
     await user.save();
     
     res.status(200).json({
       success: true,
       message: 'Usuario desactivado exitosamente',
-      data: { id: user._id, activo: false }
+      data: { id: user._id, isActive: false }
     });
   } catch (error) {
     next(error);
@@ -215,13 +316,13 @@ exports.reactivateUser = async (req, res, next) => {
       });
     }
     
-    user.activo = true;
+    user.isActive = true;
     await user.save();
     
     res.status(200).json({
       success: true,
       message: 'Usuario reactivado exitosamente',
-      data: { id: user._id, activo: true }
+      data: { id: user._id, isActive: true }
     });
   } catch (error) {
     next(error);
@@ -242,9 +343,17 @@ exports.permanentDeleteUser = async (req, res, next) => {
       });
     }
     
+    // No permitir eliminar al propio usuario
+    if (user._id.toString() === req.user.id) {
+      return res.status(400).json({
+        success: false,
+        message: 'No puedes eliminar tu propio usuario'
+      });
+    }
+    
     // No permitir eliminar el último admin
-    if (user.admin) {
-      const adminCount = await User.countDocuments({ admin: true });
+    if (user.isAdmin) {
+      const adminCount = await User.countDocuments({ isAdmin: true });
       if (adminCount === 1) {
         return res.status(400).json({
           success: false,
@@ -264,15 +373,69 @@ exports.permanentDeleteUser = async (req, res, next) => {
   }
 };
 
+// @desc    Cambiar contraseña del usuario autenticado
+// @route   PUT /api/users/change-password
+// @access  Private
+exports.changePassword = async (req, res, next) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Se requieren contraseña actual y nueva contraseña'
+      });
+    }
+    
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'La nueva contraseña debe tener al menos 6 caracteres'
+      });
+    }
+    
+    // Obtener usuario con contraseña
+    const user = await User.findById(req.user.id).select('+password');
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Usuario no encontrado'
+      });
+    }
+    
+    // Verificar contraseña actual
+    const isMatch = await user.comparePassword(currentPassword);
+    if (!isMatch) {
+      return res.status(401).json({
+        success: false,
+        message: 'Contraseña actual incorrecta'
+      });
+    }
+    
+    // Actualizar contraseña
+    user.password = newPassword;
+    user.passwordChangedAt = new Date();
+    await user.save();
+    
+    res.status(200).json({
+      success: true,
+      message: 'Contraseña actualizada exitosamente'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // @desc    Estadísticas de usuarios
 // @route   GET /api/users/stats
 // @access  Private/Admin
 exports.getUserStats = async (req, res, next) => {
   try {
     const totalUsers = await User.countDocuments();
-    const activeUsers = await User.countDocuments({ activo: true });
-    const inactiveUsers = await User.countDocuments({ activo: false });
-    const adminUsers = await User.countDocuments({ admin: true });
+    const activeUsers = await User.countDocuments({ isActive: true });
+    const inactiveUsers = await User.countDocuments({ isActive: false });
+    const adminUsers = await User.countDocuments({ isAdmin: true });
     const regularUsers = totalUsers - adminUsers;
     
     // Usuarios registrados en los últimos 30 días
@@ -280,6 +443,16 @@ exports.getUserStats = async (req, res, next) => {
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     const newUsers = await User.countDocuments({
       createdAt: { $gte: thirtyDaysAgo }
+    });
+    
+    // Usuarios que no han iniciado sesión
+    const neverLoggedIn = await User.countDocuments({
+      lastLogin: null
+    });
+    
+    // Usuarios activos en el último mes (con login)
+    const activeLastMonth = await User.countDocuments({
+      lastLogin: { $gte: thirtyDaysAgo }
     });
     
     res.status(200).json({
@@ -290,8 +463,36 @@ exports.getUserStats = async (req, res, next) => {
         inactive: inactiveUsers,
         admins: adminUsers,
         regularUsers: regularUsers,
-        newUsersLast30Days: newUsers
+        newUsersLast30Days: newUsers,
+        neverLoggedIn,
+        activeLastMonth
       }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Actualizar último login del usuario
+// @route   PATCH /api/users/:id/last-login
+// @access  Private/Admin (o interno)
+exports.updateLastLogin = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.params.id);
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Usuario no encontrado'
+      });
+    }
+    
+    user.lastLogin = new Date();
+    await user.save();
+    
+    res.status(200).json({
+      success: true,
+      data: { lastLogin: user.lastLogin }
     });
   } catch (error) {
     next(error);
