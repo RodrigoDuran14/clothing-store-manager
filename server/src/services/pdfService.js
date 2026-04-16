@@ -23,6 +23,15 @@ handlebars.registerHelper('formatDate', (date) => {
   });
 });
 
+// Helper para formato de moneda
+handlebars.registerHelper('currency', (number) => {
+  if (!number && number !== 0) return '$0';
+  return `$${number.toLocaleString('es-AR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  })}`;
+});
+
 handlebars.registerHelper('multiply', (a, b) => a * b);
 handlebars.registerHelper('sum', (a, b) => a + b);
 

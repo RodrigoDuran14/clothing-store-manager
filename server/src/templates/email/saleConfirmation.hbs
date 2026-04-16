@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Confirmación de Compra - Ticket {{saleNumber}}</title>
+  <style>
+    body {
+      font-family: 'Arial', sans-serif;
+      line-height: 1.6;
+      color: #333;
+      background-color: #f5f5f5;
+      margin: 0;
+      padding: 20px;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    .header {
+      background: linear-gradient(135deg, #0D8F81 0%, #0A6B60 100%);
+      color: white;
+      padding: 20px;
+      text-align: center;
+    }
+    .header h1 { margin: 0; font-size: 24px; }
+    .success-icon {
+      font-size: 48px;
+      margin-bottom: 10px;
+    }
+    .content { padding: 25px; }
+    .order-info {
+      background: #f8f9fa;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+    .order-info p { margin: 5px 0; }
+    .products-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 20px 0;
+    }
+    .products-table th {
+      background: #f0f0f0;
+      padding: 10px;
+      text-align: left;
+      border-bottom: 2px solid #ddd;
+    }
+    .products-table td {
+      padding: 10px;
+      border-bottom: 1px solid #eee;
+    }
+    .total-row {
+      font-weight: bold;
+      border-top: 2px solid #ddd;
+    }
+    .total-row td {
+      padding-top: 15px;
+    }
+    .payment-info {
+      background: #e8f5e9;
+      padding: 15px;
+      border-radius: 8px;
+      margin: 20px 0;
+    }
+    .button {
+      display: inline-block;
+      background: #0D8F81;
+      color: white;
+      text-decoration: none;
+      padding: 12px 25px;
+      border-radius: 5px;
+      margin: 10px 0;
+    }
+    .footer {
+      background: #f5f5f5;
+      padding: 15px;
+      text-align: center;
+      font-size: 12px;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="success-icon">✅</div>
+      <h1>¡Gracias por tu compra!</h1>
+      <p>Tu pedido ha sido confirmado</p>
+    </div>
+    
+    <div class="content">
+      <div class="order-info">
+        <p><strong>📄 Número de pedido:</strong> #{{saleNumber}}</p>
+        <p><strong>📅 Fecha:</strong> {{date}}</p>
+        <p><strong>👤 Cliente:</strong> {{customerName}}</p>
+        <p><strong>📧 Email:</strong> {{customerEmail}}</p>
+      </div>
+      
+      <h3>🛍️ Detalle de tu compra</h3>
+      <table class="products-table">
+        <thead>
+          <tr><th>Producto</th><th>Cant.</th><th>Precio</th><th>Subtotal</th></tr>
+        </thead>
+        <tbody>
+          {{#each items}}
+          <tr>
+            <td>{{this.name}}</td>
+            <td>{{this.quantity}}</td>
+            <td>${{formatNumber this.unitPrice}}</td>
+            <td>${{formatNumber this.subtotal}}</td>
+          </tr>
+          {{/each}}
+          {{#if discount}}
+          <tr>
+            <td colspan="3"><strong>Descuento</strong></td>
+            <td>-${{formatNumber discount}}</td>
+          </tr>
+          {{/if}}
+          {{#if tax}}
+          <tr>
+            <td colspan="3"><strong>IVA ({{taxRate}}%)</strong></td>
+            <td>${{formatNumber tax}}</td>
+          </tr>
+          {{/if}}
+          <tr class="total-row">
+            <td colspan="3"><strong>TOTAL</strong></td>
+            <td><strong>${{formatNumber total}}</strong></td>
+          </tr>
+        </tbody>
+      </table>
+      
+      <div class="payment-info">
+        <p><strong>💳 Método de pago:</strong> {{paymentMethod}}</p>
+        {{#if paymentReference}}
+        <p><strong>🔖 Referencia:</strong> {{paymentReference}}</p>
+        {{/if}}
+        <p><strong>💰 Total pagado:</strong> ${{formatNumber total}}</p>
+      </div>
+      
+      {{#if pickupLocation}}
+      <div class="payment-info">
+        <p><strong>📍 Punto de retiro:</strong><br>{{pickupLocation}}</p>
+      </div>
+      {{/if}}
+      
+      {{#if shippingAddress}}
+      <div class="payment-info">
+        <p><strong>🚚 Dirección de envío:</strong><br>
+        {{shippingAddress.street}} {{shippingAddress.number}}<br>
+        {{shippingAddress.city}}, {{shippingAddress.province}}<br>
+        CP: {{shippingAddress.zipCode}}
+        </p>
+      </div>
+      {{/if}}
+      
+      <div style="text-align: center;">
+        <a href="{{trackingUrl}}" class="button">📦 SEGUIR MI PEDIDO</a>
+      </div>
+      
+      <p style="margin-top: 20px; font-size: 14px; color: #666;">
+        ¿Necesitas ayuda? <a href="{{supportUrl}}">Contacta con nuestro soporte</a>
+      </p>
+    </div>
+    
+    <div class="footer">
+      <p>{{businessName}} - {{businessAddress}}</p>
+      <p>📞 {{supportPhone}} | ✉️ {{supportEmail}}</p>
+      <p style="margin-top: 10px;">
+        <a href="{{invoiceUrl}}">Ver factura</a> | 
+        <a href="{{returnsUrl}}">Política de devoluciones</a>
+      </p>
+    </div>
+  </div>
+</body>
+</html>

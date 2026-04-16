@@ -26,6 +26,9 @@ const partnerRoutes = require('./src/routes/partnerRoutes');
 const partnerSplitRoutes = require('./src/routes/partnerSplitRoutes');
 const cashRoutes = require('./src/routes/cashRoutes');
 const invoiceRoutes = require('./src/routes/invoiceRoutes');
+const reportRoutes = require('./src/routes/reportRoutes');
+const notificationRoutes = require('./src/routes/notificationRoutes');
+const notificationJobs = require('./src/jobs/notificationJobs');
 
 // Importar middleware de errores
 const errorHandler = require('./src/middleware/errorHandler');
@@ -71,6 +74,13 @@ app.use('/api/partners', partnerRoutes);
 app.use('/api/partner-splits', partnerSplitRoutes);
 app.use('/api/cash', cashRoutes);
 app.use('/api/invoices', invoiceRoutes);
+app.use('/api/reports', reportRoutes);
+app.use('/api/notifications', notificationRoutes);
+
+
+
+// Iniciar jobs
+notificationJobs.startNotificationJobs();
 
 // Ruta base para verificar API
 app.get('/api', (req, res) => {

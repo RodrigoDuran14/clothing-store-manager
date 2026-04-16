@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Factura {{invoiceNumber}}</title>
+  <style>
+    body {
+      font-family: 'Arial', sans-serif;
+      font-size: 12px;
+      line-height: 1.4;
+      color: #333;
+      margin: 0;
+      padding: 20px;
+    }
+    .invoice-container {
+      max-width: 800px;
+      margin: 0 auto;
+      border: 1px solid #ddd;
+      background: white;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      padding: 20px;
+      border-bottom: 2px solid #0D8F81;
+    }
+    .logo h1 {
+      color: #0D8F81;
+      margin: 0;
+      font-size: 24px;
+    }
+    .invoice-title {
+      text-align: right;
+    }
+    .invoice-title h2 {
+      margin: 0;
+      color: #666;
+    }
+    .invoice-number {
+      font-size: 18px;
+      font-weight: bold;
+      color: #0D8F81;
+    }
+    .data-section {
+      display: flex;
+      padding: 20px;
+      gap: 20px;
+      border-bottom: 1px solid #ddd;
+    }
+    .emitter, .receiver {
+      flex: 1;
+    }
+    .section-title {
+      font-weight: bold;
+      color: #0D8F81;
+      border-bottom: 1px solid #ddd;
+      padding-bottom: 5px;
+      margin-bottom: 10px;
+    }
+    .products-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 20px 0;
+    }
+    .products-table th {
+      background: #f5f5f5;
+      padding: 10px;
+      text-align: left;
+      border-bottom: 2px solid #ddd;
+    }
+    .products-table td {
+      padding: 8px 10px;
+      border-bottom: 1px solid #eee;
+    }
+    .text-right {
+      text-align: right;
+    }
+    .totals {
+      width: 300px;
+      margin-left: auto;
+      padding: 20px;
+    }
+    .totals table {
+      width: 100%;
+    }
+    .totals td {
+      padding: 5px;
+    }
+    .total-row {
+      font-weight: bold;
+      border-top: 2px solid #333;
+    }
+    .footer {
+      padding: 20px;
+      text-align: center;
+      border-top: 1px solid #ddd;
+      font-size: 10px;
+      color: #666;
+    }
+    .qr-code {
+      text-align: center;
+      margin: 20px;
+    }
+    .cae-info {
+      background: #f8f9fa;
+      padding: 10px;
+      text-align: center;
+      font-size: 10px;
+      margin: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="invoice-container">
+    <div class="header">
+      <div class="logo">
+        <h1>{{businessName}}</h1>
+        <p>{{businessAddress}}</p>
+        <p>CUIT: {{businessTaxId}}</p>
+      </div>
+      <div class="invoice-title">
+        <h2>FACTURA {{invoiceType}}</h2>
+        <div class="invoice-number">Nº {{invoiceNumber}}</div>
+        <div>Fecha: {{formatDate issueDate}}</div>
+        <div>Punto de Venta: {{pointOfSale}}</div>
+      </div>
+    </div>
+    
+    <div class="data-section">
+      <div class="emitter">
+        <div class="section-title">EMISOR</div>
+        <p><strong>{{businessName}}</strong><br>
+        {{businessAddress}}<br>
+        CUIT: {{businessTaxId}}<br>
+        Condición IVA: {{businessTaxCondition}}</p>
+      </div>
+      <div class="receiver">
+        <div class="section-title">RECEPTOR</div>
+        <p><strong>{{customerName}}</strong><br>
+        {{customerAddress}}<br>
+        {{customerTaxIdType}}: {{customerTaxId}}<br>
+        Condición IVA: {{customerTaxCondition}}</p>
+      </div>
+    </div>
+    
+    <table class="products-table">
+      <thead>
+        <tr><th>Código</th><th>Descripción</th><th>Cant.</th><th>Precio Unit.</th><th>Descuento</th><th>Subtotal</th></tr>
+      </thead>
+      <tbody>
+        {{#each items}}
+        <tr>
+          <td>{{this.sku}}</td>
+          <td>{{this.description}}</td>
+          <td class="text-right">{{this.quantity}}</td>
+          <td class="text-right">${{formatNumber this.unitPrice}}</td>
+          <td class="text-right">${{formatNumber this.discount}}</td>
+          <td class="text-right">${{formatNumber this.subtotal}}</td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+    
+    <div class="totals">
+      <table>
+        <tr><td>SUBTOTAL</td><td class="text-right">${{formatNumber subtotal}}</td></tr>
+        {{#if totalDiscount}}
+        <tr><td>DESCUENTO</td><td class="text-right">-${{formatNumber totalDiscount}}</td></tr>
+        {{/if}}
+        {{#each taxes}}
+        <tr><td>{{this.name}} ({{this.rate}}%)</td><td class="text-right">${{formatNumber this.amount}}</td></tr>
+        {{/each}}
+        <tr class="total-row"><td><strong>TOTAL</strong></td><td class="text-right"><strong>${{formatNumber total}}</strong></td></tr>
+      </table>
+    </div>
+    
+    <div class="data-section">
+      <div style="flex:1">
+        <div class="section-title">FORMA DE PAGO</div>
+        <p>{{paymentMethod}}<br>
+        {{#if bankAccount}}Cuenta: {{bankAccount}}{{/if}}</p>
+      </div>
+      <div style="flex:1">
+        <div class="section-title">OBSERVACIONES</div>
+        <p>{{notes}}</p>
+      </div>
+    </div>
+    
+    {{#if cae}}
+    <div class="qr-code">
+      <img src="{{qrCodeUrl}}" alt="QR AFIP" width="100">
+    </div>
+    <div class="cae-info">
+      <strong>CAE Nº:</strong> {{cae}}<br>
+      <strong>Vencimiento CAE:</strong> {{formatDate caeExpiration}}
+    </div>
+    {{/if}}
+    
+    <div class="footer">
+      <p>Original: Cliente | Duplicado: Emisor</p>
+      <p>Factura sujeta a comprobación fiscal - Artículo 39° Ley 11.683</p>
+    </div>
+  </div>
+</body>
+</html>

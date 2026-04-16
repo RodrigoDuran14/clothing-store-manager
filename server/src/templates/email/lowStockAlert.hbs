@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Arial, sans-serif; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: #0D8F81; color: white; padding: 10px; text-align: center; }
+    .product-list { margin: 20px 0; }
+    .product { padding: 10px; border-bottom: 1px solid #eee; }
+    .alert { color: #e74c3c; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h2>⚠️ Alerta de Stock Bajo</h2>
+    </div>
+    
+    <p>Los siguientes productos tienen stock por debajo del mínimo recomendado:</p>
+    
+    <div class="product-list">
+      {{#each products}}
+      <div class="product">
+        <strong>{{this}}</strong>
+      </div>
+      {{/each}}
+    </div>
+    
+    <p class="alert">Total de productos con alerta: {{count}}</p>
+    
+    <p>Por favor, revise el inventario y realice los pedidos necesarios.</p>
+    
+    <hr>
+    <small>Fecha: {{date}}</small>
+  </div>
+</body>
+</html>

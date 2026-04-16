@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>⚠️ Alerta de Crédito - {{clientName}}</title>
+  <style>
+    body {
+      font-family: 'Arial', sans-serif;
+      line-height: 1.6;
+      color: #333;
+      background-color: #f5f5f5;
+      margin: 0;
+      padding: 20px;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    .header {
+      background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+      color: white;
+      padding: 20px;
+      text-align: center;
+    }
+    .header h1 { margin: 0; font-size: 24px; }
+    .warning-icon { font-size: 48px; margin-bottom: 10px; }
+    .content { padding: 25px; }
+    .credit-info {
+      background: #f8f9fa;
+      padding: 20px;
+      border-radius: 8px;
+      margin: 20px 0;
+      text-align: center;
+    }
+    .credit-usage {
+      font-size: 36px;
+      font-weight: bold;
+      color: #e74c3c;
+    }
+    .progress-bar {
+      background: #ecf0f1;
+      border-radius: 10px;
+      height: 20px;
+      margin: 15px 0;
+      overflow: hidden;
+    }
+    .progress-fill {
+      background: #e74c3c;
+      height: 100%;
+      border-radius: 10px;
+      width: {{usagePercentage}}%;
+    }
+    .alert-level {
+      display: inline-block;
+      padding: 5px 15px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: bold;
+    }
+    .alert-critical { background: #e74c3c; color: white; }
+    .alert-warning { background: #f39c12; color: white; }
+    .button {
+      display: inline-block;
+      background: #0D8F81;
+      color: white;
+      text-decoration: none;
+      padding: 12px 25px;
+      border-radius: 5px;
+      margin: 10px 5px;
+    }
+    .button-danger {
+      background: #e74c3c;
+    }
+    .footer {
+      background: #f5f5f5;
+      padding: 15px;
+      text-align: center;
+      font-size: 12px;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="warning-icon">⚠️</div>
+      <h1>Alerta de Crédito</h1>
+      <p>{{clientName}}</p>
+    </div>
+    
+    <div class="content">
+      <p>Estimado/a <strong>{{clientName}}</strong>,</p>
+      
+      <p>Te informamos que tu cuenta corriente ha alcanzado un nivel de uso elevado.</p>
+      
+      <div class="credit-info">
+        <div class="credit-usage">{{usagePercentage}}%</div>
+        <div class="progress-bar">
+          <div class="progress-fill"></div>
+        </div>
+        <p><strong>Saldo actual:</strong> ${{formatNumber currentBalance}}</p>
+        <p><strong>Límite de crédito:</strong> ${{formatNumber creditLimit}}</p>
+        <p><strong>Disponible:</strong> ${{formatNumber availableCredit}}</p>
+      </div>
+      
+      <div style="text-align: center; margin: 20px 0;">
+        {{#if isCritical}}
+        <span class="alert-level alert-critical">⚠️ CRÍTICO - LÍMITE EXCEDIDO</span>
+        {{else}}
+        <span class="alert-level alert-warning">⚠️ ADVERTENCIA - CERCA DEL LÍMITE</span>
+        {{/if}}
+      </div>
+      
+      <p>Te recomendamos regularizar tu situación para seguir disfrutando de los beneficios de tu cuenta corriente.</p>
+      
+      <div style="text-align: center;">
+        <a href="{{paymentUrl}}" class="button">💳 REALIZAR UN PAGO</a>
+        <a href="{{contactUrl}}" class="button button-danger">📞 CONTACTAR SOPORTE</a>
+      </div>
+      
+      <p style="margin-top: 20px; font-size: 14px; color: #666;">
+        Si ya realizaste un pago, por favor ignora este mensaje. El saldo se actualizará en las próximas horas.
+      </p>
+    </div>
+    
+    <div class="footer">
+      <p>{{businessName}} - {{businessAddress}}</p>
+      <p>📞 {{supportPhone}} | ✉️ {{supportEmail}}</p>
+    </div>
+  </div>
+</body>
+</html>
