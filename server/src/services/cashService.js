@@ -1,146 +1,119 @@
 const PartnerCashRegister = require('../models/PartnerCashRegister');
-const Expense = require('../models/Expense');
-const CashAdjustment = require('../models/CashAdjustment');
 const CashClosure = require('../models/CashClosure');
-const PartnerSplit = require('../models/PartnerSplit');
+const Expense = require('../models/Expense');
+const Sale = require('../models/Sale');
 
-// Registrar gasto desde caja
-const registerExpense = async (expenseData, userId) => {
-  const cashRegister = await PartnerCashRegister.findOne({ 
-    partnerId: expenseData.partnerId,
-    isOpen: true 
-  });
-  
-  if (!cashRegister) {
-    throw new Error('Cash register is not open');
-  }
-  
-  // Crear gasto
-  const expense = await Expense.create({
-    ...expenseData,
-    createdBy: userId
-  });
-  
-  // Registrar movimiento en caja
-  const movement = await cashRegister.addMovement(
-    'expense',
-    expense.amount,
-    `Expense: ${expense.description}`,
-    expense._id,
-    'Expense',
-    userId
-  );
-  
-  expense.registeredInCash = true;
-  expense.registeredAt = new Date();
-  await expense.save();
-  
-  return { expense, movement };
-};
+// ============================================
+// FUNCIONES DE PREPARACIÓN Y CIERRE
+// ============================================
 
-// Retirar efectivo de caja (socio se lleva dinero)
-const withdrawCash = async (cashRegisterId, amount, reason, userId) => {
+// Preparar cierre de caja (vista previa)
+const prepareCashClosure = async (cashRegisterId, date = new Date()) => {
   const cashRegister = await PartnerCashRegister.findById(cashRegisterId);
-  
   if (!cashRegister) {
     throw new Error('Cash register not found');
   }
   
-  if (!cashRegister.isOpen) {
-    throw new Error('Cash register is closed');
-  }
+  const startOfDay = new Date(date);
+  startOfDay.setHours(0, 0, 0, 0);
+  const endOfDay = new Date(date);
+  endOfDay.setHours(23, 59, 59, 999);
   
-  if (cashRegister.balance < amount) {
-    throw new Error(`Insufficient funds. Balance: ${cashRegister.balance}`);
-  }
-  
-  const movement = await cashRegister.addMovement(
-    'withdrawal',
-    amount,
-    `Withdrawal: ${reason}`,
-    null,
-    null,
-    userId
-  );
-  
-  return movement;
-};
-
-// Depositar efectivo en caja
-const depositCash = async (cashRegisterId, amount, reason, userId) => {
-  const cashRegister = await PartnerCashRegister.findById(cashRegisterId);
-  
-  if (!cashRegister) {
-    throw new Error('Cash register not found');
-  }
-  
-  if (!cashRegister.isOpen) {
-    throw new Error('Cash register is closed');
-  }
-  
-  const movement = await cashRegister.addMovement(
-    'deposit',
-    amount,
-    `Deposit: ${reason}`,
-    null,
-    null,
-    userId
-  );
-  
-  return movement;
-};
-
-// Ajustar caja (corregir diferencia)
-const adjustCash = async (cashRegisterId, type, amount, reason, userId) => {
-  const cashRegister = await PartnerCashRegister.findById(cashRegisterId);
-  
-  if (!cashRegister) {
-    throw new Error('Cash register not found');
-  }
-  
-  const previousBalance = cashRegister.balance;
-  let newBalance = previousBalance;
-  
-  if (type === 'surplus') {
-    newBalance = previousBalance + amount;
-  } else if (type === 'shortage') {
-    newBalance = previousBalance - amount;
-  }
-  
-  if (newBalance < 0) {
-    throw new Error('Adjustment would result in negative balance');
-  }
-  
-  // Registrar ajuste
-  const adjustment = await CashAdjustment.create({
+  // Verificar si ya existe cierre
+  const existingClosure = await CashClosure.findOne({
     cashRegisterId,
-    partnerId: cashRegister.partnerId,
-    type,
-    amount,
-    previousBalance,
-    newBalance,
-    reason,
-    createdBy: userId,
-    approvedBy: userId
+    date: { $gte: startOfDay, $lte: endOfDay }
   });
   
-  // Aplicar ajuste a la caja
-  const movement = await cashRegister.addMovement(
-    'adjustment',
-    type === 'surplus' ? amount : -amount,
-    `Adjustment: ${reason}`,
-    adjustment._id,
-    'CashAdjustment',
-    userId
+  if (existingClosure && existingClosure.status !== 'open') {
+    throw new Error('Cash already closed for this day');
+  }
+  
+  // Calcular efectivo esperado
+  const expectedData = await cashRegister.calculateExpectedCash(date);
+  
+  // Obtener ventas del día por método de pago
+  const sales = await Sale.find({
+    date: { $gte: startOfDay, $lte: endOfDay },
+    status: 'completed'
+  });
+  
+  const totals = {
+    cashSales: 0,
+    cardSales: 0,
+    transferSales: 0,
+    creditSales: 0,
+    expenses: 0,
+    withdrawals: 0,
+    deposits: 0
+  };
+  
+  for (const sale of sales) {
+    for (const payment of sale.payments) {
+      switch(payment.method) {
+        case 'cash': totals.cashSales += payment.amount; break;
+        case 'credit_card':
+        case 'debit_card': totals.cardSales += payment.amount; break;
+        case 'transfer': totals.transferSales += payment.amount; break;
+        case 'credit_account': totals.creditSales += payment.amount; break;
+      }
+    }
+  }
+  
+  // Gastos del día
+  const expenses = await Expense.find({
+    partnerId: cashRegister.partnerId,
+    date: { $gte: startOfDay, $lte: endOfDay }
+  });
+  totals.expenses = expenses.reduce((sum, e) => sum + e.amount, 0);
+  
+  // Movimientos de caja
+  const movements = cashRegister.movements.filter(m => 
+    m.date >= startOfDay && m.date <= endOfDay
   );
   
-  return { adjustment, movement };
+  totals.withdrawals = movements
+    .filter(m => m.type === 'withdrawal')
+    .reduce((sum, m) => sum + m.amount, 0);
+  
+  totals.deposits = movements
+    .filter(m => m.type === 'deposit')
+    .reduce((sum, m) => sum + m.amount, 0);
+  
+  // Resumen de movimientos por tipo
+  const movementSummary = {
+    totalMovements: movements.length,
+    byType: {
+      sale: { count: 0, amount: 0 },
+      expense: { count: 0, amount: 0 },
+      withdrawal: { count: 0, amount: 0 },
+      deposit: { count: 0, amount: 0 },
+      transfer: { count: 0, amount: 0 },
+      adjustment: { count: 0, amount: 0 }
+    }
+  };
+  
+  for (const movement of movements) {
+    if (movementSummary.byType[movement.type]) {
+      movementSummary.byType[movement.type].count++;
+      movementSummary.byType[movement.type].amount += movement.amount;
+    }
+  }
+  
+  return {
+    cashRegister,
+    expectedData,
+    totals,
+    movementSummary,
+    openingBalance: cashRegister.initialBalance,
+    currentBalance: cashRegister.balance,
+    expectedBalance: expectedData.expected
+  };
 };
 
-// Cerrar caja diaria
-const closeCashRegister = async (cashRegisterId, userId) => {
+// Realizar cierre de caja
+const performCashClosure = async (cashRegisterId, closingBalance, userId, notes = '') => {
   const cashRegister = await PartnerCashRegister.findById(cashRegisterId);
-  
   if (!cashRegister) {
     throw new Error('Cash register not found');
   }
@@ -149,115 +122,191 @@ const closeCashRegister = async (cashRegisterId, userId) => {
     throw new Error('Cash register is already closed');
   }
   
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
   
-  // Obtener movimientos del día
-  const todayMovements = cashRegister.movements.filter(m => 
-    new Date(m.date) >= today
-  );
-  
-  // Calcular totales
-  const salesTotal = todayMovements
-    .filter(m => m.type === 'sale')
-    .reduce((sum, m) => sum + m.amount, 0);
-  
-  const expensesTotal = todayMovements
-    .filter(m => m.type === 'expense')
-    .reduce((sum, m) => sum + m.amount, 0);
-  
-  const withdrawalsTotal = todayMovements
-    .filter(m => m.type === 'withdrawal')
-    .reduce((sum, m) => sum + m.amount, 0);
-  
-  const depositsTotal = todayMovements
-    .filter(m => m.type === 'deposit')
-    .reduce((sum, m) => sum + m.amount, 0);
-  
-  const transfersTotal = todayMovements
-    .filter(m => m.type === 'transfer_out' || m.type === 'transfer_in')
-    .reduce((sum, m) => sum + m.amount, 0);
-  
-  // Calcular balance esperado
-  const expectedBalance = cashRegister.initialBalance + salesTotal + depositsTotal - expensesTotal - withdrawalsTotal;
-  
-  // Crear cierre
-  const closure = await CashClosure.create({
+  // Verificar cierre existente
+  let closure = await CashClosure.findOne({
     cashRegisterId,
-    partnerId: cashRegister.partnerId,
-    date: today,
-    openingBalance: cashRegister.initialBalance,
-    closingBalance: cashRegister.balance,
-    expectedBalance,
-    difference: cashRegister.balance - expectedBalance,
-    salesTotal,
-    expensesTotal,
-    withdrawalsTotal,
-    depositsTotal,
-    transfersTotal,
-    status: 'closed',
-    closedBy: userId,
-    closedAt: new Date()
+    date: { $gte: startOfDay }
   });
   
-  // Cerrar caja
+  // Preparar datos del cierre
+  const closureData = await prepareCashClosure(cashRegisterId);
+  
+  const difference = closingBalance - closureData.expectedBalance;
+  
+  // Crear o actualizar cierre
+  if (!closure) {
+    closure = new CashClosure({
+      cashRegisterId,
+      partnerId: cashRegister.partnerId,
+      date: startOfDay,
+      openingBalance: closureData.openingBalance,
+      closingBalance,
+      expectedBalance: closureData.expectedBalance,
+      difference,
+      totals: closureData.totals,
+      movementSummary: closureData.movementSummary,
+      status: difference !== 0 ? 'discrepancy' : 'closed',
+      closedBy: userId,
+      closedAt: new Date(),
+      notes
+    });
+    
+    if (difference !== 0) {
+      closure.discrepancy = {
+        hasDiscrepancy: true,
+        amount: difference,
+        resolved: false
+      };
+    }
+  } else {
+    closure.closingBalance = closingBalance;
+    closure.expectedBalance = closureData.expectedBalance;
+    closure.difference = difference;
+    closure.totals = closureData.totals;
+    closure.movementSummary = closureData.movementSummary;
+    closure.status = difference !== 0 ? 'discrepancy' : 'closed';
+    closure.closedBy = userId;
+    closure.closedAt = new Date();
+    closure.notes = notes;
+    
+    if (difference !== 0 && !closure.discrepancy.hasDiscrepancy) {
+      closure.discrepancy = {
+        hasDiscrepancy: true,
+        amount: difference,
+        resolved: false
+      };
+    }
+  }
+  
+  await closure.save();
+  
+  // Cerrar la caja
   await cashRegister.close(userId);
+  
+  // Registrar la discrepancia en el historial de la caja
+  if (difference !== 0) {
+    cashRegister.discrepancies.push({
+      date: new Date(),
+      expected: closureData.expectedBalance,
+      actual: closingBalance,
+      difference,
+      resolved: false,
+      notes: notes
+    });
+    await cashRegister.save();
+  }
   
   return { closure, cashRegister };
 };
 
-// Obtener reporte de caja por período
-const getCashReport = async (partnerId, startDate, endDate) => {
-  const cashRegister = await PartnerCashRegister.findOne({ partnerId });
-  
-  if (!cashRegister) {
-    throw new Error('Cash register not found');
+// ============================================
+// FUNCIONES DE REPORTES
+// ============================================
+
+// Obtener reporte de cierres con diferencias
+const getDiscrepancyReport = async (startDate, endDate) => {
+  return await CashClosure.getDiscrepancies(startDate, endDate);
+};
+
+// Resolver discrepancia
+const resolveDiscrepancy = async (closureId, notes, userId) => {
+  const closure = await CashClosure.findById(closureId);
+  if (!closure) {
+    throw new Error('Cash closure not found');
   }
   
-  const movements = cashRegister.movements.filter(m => 
-    new Date(m.date) >= startDate && new Date(m.date) <= endDate
-  );
+  await closure.resolveDiscrepancy(notes, userId);
   
-  // Agrupar por tipo
-  const groupedMovements = {};
-  for (const movement of movements) {
-    if (!groupedMovements[movement.type]) {
-      groupedMovements[movement.type] = {
-        count: 0,
-        total: 0,
-        movements: []
-      };
+  // Actualizar el historial de la caja
+  const cashRegister = await PartnerCashRegister.findById(closure.cashRegisterId);
+  if (cashRegister) {
+    const discrepancyRecord = cashRegister.discrepancies.find(
+      d => d.date.toDateString() === closure.date.toDateString()
+    );
+    if (discrepancyRecord) {
+      discrepancyRecord.resolved = true;
+      discrepancyRecord.resolvedBy = userId;
+      await cashRegister.save();
     }
-    groupedMovements[movement.type].count++;
-    groupedMovements[movement.type].total += movement.amount;
-    groupedMovements[movement.type].movements.push(movement);
   }
   
-  const closures = await CashClosure.find({
-    partnerId,
-    date: { $gte: startDate, $lte: endDate }
-  }).sort({ date: -1 });
+  return closure;
+};
+
+// Obtener arqueo de caja (resumen)
+const getCashAudit = async (cashRegisterId, date) => {
+  const startOfDay = new Date(date);
+  startOfDay.setHours(0, 0, 0, 0);
+  
+  const closure = await CashClosure.findOne({
+    cashRegisterId,
+    date: { $gte: startOfDay }
+  });
+  
+  if (!closure) {
+    throw new Error('No cash closure found for this date');
+  }
+  
+  const cashRegister = await PartnerCashRegister.findById(cashRegisterId);
   
   return {
+    date: closure.date,
+    cashier: cashRegister?.cashierName || 'No asignado',
+    openingBalance: closure.openingBalance,
+    expectedBalance: closure.expectedBalance,
+    countedBalance: closure.closingBalance,
+    difference: closure.difference,
+    movementSummary: closure.movementSummary,
+    totals: closure.totals,
+    discrepancy: closure.discrepancy
+  };
+};
+
+// Reporte de caja por período (resumen diario)
+const getDailyCashReport = async (partnerId, startDate, endDate) => {
+  const closures = await CashClosure.find({
     partnerId,
+    date: { $gte: startDate, $lte: endDate },
+    status: { $in: ['closed', 'audited'] }
+  }).sort({ date: 1 });
+  
+  const dailyReport = closures.map(closure => ({
+    date: closure.date,
+    openingBalance: closure.openingBalance,
+    closingBalance: closure.closingBalance,
+    difference: closure.difference,
+    cashSales: closure.totals.cashSales,
+    expenses: closure.totals.expenses,
+    withdrawals: closure.totals.withdrawals,
+    deposits: closure.totals.deposits,
+    hasDiscrepancy: closure.discrepancy.hasDiscrepancy
+  }));
+  
+  const summary = {
+    totalCashSales: dailyReport.reduce((sum, d) => sum + d.cashSales, 0),
+    totalExpenses: dailyReport.reduce((sum, d) => sum + d.expenses, 0),
+    totalWithdrawals: dailyReport.reduce((sum, d) => sum + d.withdrawals, 0),
+    totalDeposits: dailyReport.reduce((sum, d) => sum + d.deposits, 0),
+    daysWithDiscrepancy: dailyReport.filter(d => d.hasDiscrepancy).length,
+    averageDailySales: dailyReport.length > 0 ? 
+      dailyReport.reduce((sum, d) => sum + d.cashSales, 0) / dailyReport.length : 0
+  };
+  
+  return {
     period: { startDate, endDate },
-    summary: {
-      initialBalance: cashRegister.initialBalance,
-      finalBalance: cashRegister.balance,
-      totalIncome: (groupedMovements.sale?.total || 0) + (groupedMovements.deposit?.total || 0),
-      totalExpenses: (groupedMovements.expense?.total || 0) + (groupedMovements.withdrawal?.total || 0),
-      movementCount: movements.length
-    },
-    groupedMovements,
-    closures
+    summary,
+    daily: dailyReport
   };
 };
 
 module.exports = {
-  registerExpense,
-  withdrawCash,
-  depositCash,
-  adjustCash,
-  closeCashRegister,
-  getCashReport
+  prepareCashClosure,
+  performCashClosure,
+  getDiscrepancyReport,
+  resolveDiscrepancy,
+  getCashAudit,
+  getDailyCashReport
 };

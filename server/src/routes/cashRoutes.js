@@ -10,35 +10,40 @@ const { isAdmin } = require('../middleware/role');
 router.use(protect);
 
 // ============================================
-// OPERACIONES DE CAJA PARA SOCIO AUTENTICADO
+// APERTURA Y CIERRE
 // ============================================
-
-// Abrir caja
 router.post('/open', cashController.openCashRegister);
-
-// Cerrar caja
 router.post('/close', cashController.closeCashRegister);
 
-// Registrar gasto
+// ============================================
+// OPERACIONES DE CAJA
+// ============================================
 router.post('/expense', cashController.registerExpense);
-
-// Retirar efectivo
 router.post('/withdraw', cashController.withdrawCash);
-
-// Depositar efectivo
 router.post('/deposit', cashController.depositCash);
 
-// Reporte de caja
+// ============================================
+// REPORTES Y MOVIMIENTOS
+// ============================================
 router.get('/report', cashController.getCashReport);
-
-// Movimientos de caja
 router.get('/movements', cashController.getCashMovements);
+
+// ============================================
+// CIERRE (PREPARAR Y EJECUTAR)
+// ============================================
+router.get('/prepare-closure', cashController.prepareClosure);
+
+// ============================================
+// ARQUEO Y AUDITORÍA
+// ============================================
+router.get('/audit', cashController.getCashAudit);
+router.get('/daily-report', cashController.getDailyCashReport);
 
 // ============================================
 // OPERACIONES DE ADMIN
 // ============================================
-
-// Ajustar caja (solo admin)
 router.post('/adjust', isAdmin, cashController.adjustCash);
+router.get('/discrepancies', isAdmin, cashController.getDiscrepancies);
+router.put('/discrepancies/:id/resolve', isAdmin, cashController.resolveDiscrepancy);
 
 module.exports = router;

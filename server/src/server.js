@@ -82,6 +82,7 @@ app.use('/api/notifications', notificationRoutes);
 // Iniciar jobs
 notificationJobs.startNotificationJobs();
 
+
 // Ruta base para verificar API
 app.get('/api', (req, res) => {
   res.status(200).json({
