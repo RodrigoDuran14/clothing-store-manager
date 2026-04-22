@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>🎉 Últimos días - {{promotionName}}</title>
+  <style>
+    body {
+      font-family: 'Arial', sans-serif;
+      line-height: 1.6;
+      color: #333;
+      background-color: #f5f5f5;
+      margin: 0;
+      padding: 20px;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    .header {
+      background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);
+      color: white;
+      padding: 20px;
+      text-align: center;
+    }
+    .discount-badge {
+      background: #e74c3c;
+      display: inline-block;
+      padding: 5px 15px;
+      border-radius: 25px;
+      font-size: 14px;
+      margin-top: 10px;
+    }
+    .content { padding: 25px; }
+    .countdown {
+      background: #f8f9fa;
+      text-align: center;
+      padding: 20px;
+      border-radius: 10px;
+      margin: 20px 0;
+    }
+    .days-left {
+      font-size: 48px;
+      font-weight: bold;
+      color: #e74c3c;
+    }
+    .promotion-details {
+      background: #fff3e0;
+      padding: 15px;
+      border-radius: 8px;
+      margin: 20px 0;
+    }
+    .button {
+      display: inline-block;
+      background: #e67e22;
+      color: white;
+      text-decoration: none;
+      padding: 15px 30px;
+      border-radius: 5px;
+      font-size: 18px;
+      font-weight: bold;
+    }
+    .footer {
+      background: #f5f5f5;
+      padding: 15px;
+      text-align: center;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🎉 {{promotionName}}</h1>
+      <div class="discount-badge">{{discountText}}</div>
+    </div>
+    
+    <div class="content">
+      <p>Hola <strong>{{customerName}}</strong>,</p>
+      
+      <p>¡No dejes pasar esta oportunidad! La promoción <strong>{{promotionName}}</strong> está por terminar.</p>
+      
+      <div class="countdown">
+        <div class="days-left">{{daysRemaining}}</div>
+        <div style="font-size: 18px;">días restantes</div>
+        <div style="font-size: 14px; color: #666;">Vence el {{formatDate endDate}}</div>
+      </div>
+      
+      <div class="promotion-details">
+        <strong>📋 Detalles de la promoción:</strong><br>
+        {{promotionDescription}}<br><br>
+        {{#if code}}
+        <strong>🎟️ Código:</strong> <code style="background:#eee; padding:5px 10px;">{{code}}</code>
+        {{/if}}
+      </div>
+      
+      <div style="text-align: center;">
+        <a href="{{shopUrl}}" class="button">🛍️ APROVECHAR AHORA</a>
+      </div>
+      
+      {{#if applicableProducts}}
+      <p style="margin-top: 20px; font-size: 14px;">
+        <strong>Productos incluidos:</strong> {{applicableProducts}}
+      </p>
+      {{/if}}
+      
+      <p style="margin-top: 20px; font-size: 14px; color: #666;">
+        *Aplican términos y condiciones. Consulta en tienda para más información.
+      </p>
+    </div>
+    
+    <div class="footer">
+      <p>{{businessName}} - {{businessAddress}}</p>
+      <p>📞 {{supportPhone}}</p>
+    </div>
+  </div>
+</body>
+</html>
