@@ -3,6 +3,8 @@ const User = require('../models/user');
 const Sale = require('../models/Sale');
 const { filterObj, paginate, formatPagination } = require('../utils/helpers');
 const commissionService = require('../services/commissionService');
+const auditService = require("../services/auditService");
+
 
 // @desc    Obtener todos los vendedores
 // @route   GET /api/sellers
@@ -205,6 +207,17 @@ exports.createSeller = async (req, res, next) => {
       notes,
       userId: userId || null
     });
+
+    await auditService.logAction({
+          userId: req.user.id,
+          userEmail: req.user.email,
+          userRole: "admin",
+          action: "CREATE",
+          entity: "Seller",
+          entityId: seller._id,
+          newData: { name: seller.fullName, email: seller.email },
+          req,
+        });
     
     res.status(201).json({
       success: true,
@@ -286,6 +299,8 @@ exports.updateSeller = async (req, res, next) => {
         });
       }
     }
+
+    const oldSeller = await Seller.findById(req.params.id).lean();
     
     const seller = await Seller.findByIdAndUpdate(
       req.params.id,
@@ -302,6 +317,20 @@ exports.updateSeller = async (req, res, next) => {
         message: 'Vendedor no encontrado'
       });
     }
+
+    const changes = auditService.computeChanges(oldSeller, seller.toObject());
+        await auditService.logAction({
+          userId: req.user.id,
+          userEmail: req.user.email,
+          userRole: req.user.isAdmin ? "admin" : "user",
+          action: "UPDATE",
+          entity: "Seller",
+          entityId: seller._id,
+          oldData: oldSeller,
+          newData: seller.toObject(),
+          changes,
+          req,
+        });
     
     res.status(200).json({
       success: true,
@@ -344,6 +373,18 @@ exports.deleteSeller = async (req, res, next) => {
     seller.active = false;
     seller.terminationDate = new Date();
     await seller.save();
+
+    await auditService.logAction({
+          userId: req.user.id,
+          userEmail: req.user.email,
+          userRole: "admin",
+          action: "DELETE",
+          entity: "Seller",
+          entityId: seller._id,
+          oldData: { isActive: true },
+          newData: { isActive: false },
+          req,
+        });
     
     res.status(200).json({
       success: true,
@@ -488,8 +529,25 @@ exports.payCommission = async (req, res, next) => {
       });
     }
     
+    const oldCommission = seller.totalCommission;
+
     // Registrar el pago de comisión
     await seller.recordCommissionPayment(period, amount, paymentReference);
+
+        await auditService.logAction({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      userRole: 'admin',
+      action: 'PAY_COMMISSION',
+      entity: 'Seller',
+      entityId: seller._id,
+      changes: [{
+        field: 'totalCommission',
+        oldValue: oldCommission,
+        newValue: seller.totalCommission
+      }],
+      req
+    });
     
     res.status(200).json({
       success: true,
@@ -640,6 +698,18 @@ exports.toggleSellerStatus = async (req, res, next) => {
     }
     
     await seller.save();
+
+    await auditService.logAction({
+          userId: req.user.id,
+          userEmail: req.user.email,
+          userRole: "admin",
+          action: "TOGGLE_STATUS",
+          entity: "Seller",
+          entityId: seller._id,
+          oldData: { isActive: !seller.isActive },
+          newData: { isActive: seller.isActive },
+          req,
+        });
     
     res.status(200).json({
       success: true,
@@ -685,6 +755,17 @@ exports.addShift = async (req, res, next) => {
     });
     
     await seller.save();
+
+    await auditService.logAction({
+          userId: req.user.id,
+          userEmail: req.user.email,
+          userRole: "admin",
+          action: "ADD_SHIFT",
+          entity: "Seller",
+          entityId: seller._id,
+          newData: { newShift: seller.shifts[seller.shifts.length - 1] },
+          req,
+        });
     
     res.status(201).json({
       success: true,
@@ -715,6 +796,16 @@ exports.removeShift = async (req, res, next) => {
     // Eliminar el turno
     seller.shifts = seller.shifts.filter(shift => shift._id.toString() !== shiftId);
     await seller.save();
+
+    await auditService.logAction({
+          userId: req.user.id,
+          userEmail: req.user.email,
+          userRole: "admin",
+          action: "REMOVE_SHIFT",
+          entity: "Seller",
+          entityId: seller._id,
+          req,
+        });
     
     res.status(200).json({
       success: true,

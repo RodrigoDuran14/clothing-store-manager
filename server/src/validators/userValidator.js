@@ -34,45 +34,6 @@ const validateCreateUser = [
 ];
 
 /**
- * Validador para actualizar usuario (admin)
- */
-const validateUpdateUser = [
-  param('id')
-    .isMongoId().withMessage('ID de usuario inválido'),
-  
-  body('name')
-    .optional()
-    .isLength({ max: 100 }).withMessage('El nombre no puede exceder 100 caracteres')
-    .trim(),
-  
-  body('email')
-    .optional()
-    .isEmail().withMessage('Email inválido')
-    .normalizeEmail()
-    .toLowerCase(),
-  
-  body('phone')
-    .optional()
-    .isLength({ max: 20 }).withMessage('El teléfono no puede exceder 20 caracteres')
-    .trim(),
-  
-  body('isAdmin')
-    .optional()
-    .isBoolean().withMessage('isAdmin debe ser true o false')
-    .toBoolean(),
-  
-  body('isActive')
-    .optional()
-    .isBoolean().withMessage('isActive debe ser true o false')
-    .toBoolean(),
-  
-  body('image')
-    .optional()
-    .isURL().withMessage('La imagen debe ser una URL válida')
-    .trim()
-];
-
-/**
  * Validador para actualizar perfil propio
  */
 const validateUpdateMyProfile = [
@@ -113,15 +74,7 @@ const validateChangePassword = [
 /**
  * Validador para obtener usuario por ID
  */
-const validateGetUser = [
-  param('id')
-    .isMongoId().withMessage('ID de usuario inválido')
-];
-
-/**
- * Validador para eliminar usuario
- */
-const validateDeleteUser = [
+const validateIdUser = [
   param('id')
     .isMongoId().withMessage('ID de usuario inválido')
 ];
@@ -156,30 +109,11 @@ const validateListUsers = [
     .trim()
 ];
 
-/**
- * Validador para reactivar usuario
- */
-const validateReactivateUser = [
-  param('id')
-    .isMongoId().withMessage('ID de usuario inválido')
-];
-
-/**
- * Validador para actualizar último login
- */
-const validateUpdateLastLogin = [
-  param('id')
-    .isMongoId().withMessage('ID de usuario inválido')
-];
 
 module.exports = {
   validateCreateUser,
-  validateUpdateUser,
   validateUpdateMyProfile,
   validateChangePassword,
-  validateGetUser,
-  validateDeleteUser,
+  validateIdUser,
   validateListUsers,
-  validateReactivateUser,
-  validateUpdateLastLogin
 };

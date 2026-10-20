@@ -9,7 +9,7 @@ const restrictTo = (...roles) => {
     }
 
     // Verificar si el usuario tiene alguno de los roles permitidos
-    const userRole = req.user.admin ? 'admin' : 'user';
+    const userRole = req.user.isAdmin ? 'admin' : 'user';
     
     if (!roles.includes(userRole)) {
       return res.status(403).json({
@@ -24,7 +24,7 @@ const restrictTo = (...roles) => {
 
 // Middleware para verificar si es admin
 const isAdmin = (req, res, next) => {
-  if (!req.user || !req.user.admin) {
+  if (!req.user || !req.user.isAdmin) {
     return res.status(403).json({
       success: false,
       message: 'Acceso denegado. Se requieren permisos de administrador'
@@ -38,7 +38,7 @@ const isSameUserOrAdmin = (req, res, next) => {
   const userId = req.params.id;
   const currentUserId = req.user.id;
   
-  if (req.user.admin || userId === currentUserId) {
+  if (req.user.isAdmin || userId === currentUserId) {
     return next();
   }
   

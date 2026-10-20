@@ -1,7 +1,8 @@
-const Client = require('../models/Client');
-const Sale = require('../models/Sale');
-const { filterObj, paginate, formatPagination } = require('../utils/helpers');
-const creditService = require('../services/creditService');
+const Client = require("../models/Client");
+const Sale = require("../models/Sale");
+const { filterObj, paginate, formatPagination } = require("../utils/helpers");
+const creditService = require("../services/creditService");
+const auditService = require("../services/auditService");
 
 // @desc    Obtener todos los clientes
 // @route   GET /api/clients
@@ -15,59 +16,63 @@ exports.getClients = async (req, res, next) => {
       isVip,
       category,
       search,
-      orderBy = 'name'
+      orderBy = "name",
     } = req.query;
-    
+
     // Construir filtro de búsqueda
     const filter = {};
-    if (isActive !== undefined) filter.isActive = isActive === 'true';
-    if (isVip !== undefined) filter.isVip = isVip === 'true';
+    if (isActive !== undefined) filter.isActive = isActive === "true";
+    if (isVip !== undefined) filter.isVip = isVip === "true";
     if (category) filter.clientCategory = category;
-    
+
     // Búsqueda por texto en múltiples campos
     if (search) {
       filter.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } },
-        { document: { $regex: search, $options: 'i' } },
-        { phone: { $regex: search, $options: 'i' } }
+        { name: { $regex: search, $options: "i" } },
+        { email: { $regex: search, $options: "i" } },
+        { document: { $regex: search, $options: "i" } },
+        { phone: { $regex: search, $options: "i" } },
       ];
     }
-    
+
     // Configurar ordenamiento
     let sort = {};
-    switch(orderBy) {
-      case 'name':
+    switch (orderBy) {
+      case "name":
         sort = { name: 1 };
         break;
-      case 'totalSpent':
+      case "totalSpent":
         sort = { totalSpent: -1 };
         break;
-      case 'lastPurchase':
+      case "lastPurchase":
         sort = { lastPurchase: -1 };
         break;
-      case 'category':
+      case "category":
         sort = { clientCategory: -1 };
         break;
       default:
         sort = { name: 1 };
     }
-    
+
     // Paginación
-    const { skip, limit: limitValue, page: currentPage } = paginate(page, limit);
-    
+    const {
+      skip,
+      limit: limitValue,
+      page: currentPage,
+    } = paginate(page, limit);
+
     const clients = await Client.find(filter)
       .sort(sort)
       .skip(skip)
       .limit(limitValue);
-    
+
     const total = await Client.countDocuments(filter);
     const pagination = formatPagination(total, currentPage, limitValue);
-    
+
     res.status(200).json({
       success: true,
       data: clients,
-      pagination
+      pagination,
     });
   } catch (error) {
     next(error);
@@ -80,19 +85,19 @@ exports.getClients = async (req, res, next) => {
 exports.getClientById = async (req, res, next) => {
   try {
     const client = await Client.findById(req.params.id)
-      .populate('purchaseHistory.products.productId', 'name images')
-      .populate('preferences.preferredCategories', 'name');
-    
+      .populate("purchaseHistory.products.productId", "name images")
+      .populate("preferences.preferredCategories", "name");
+
     if (!client) {
       return res.status(404).json({
         success: false,
-        message: 'Cliente no encontrado'
+        message: "Cliente no encontrado",
       });
     }
-    
+
     res.status(200).json({
       success: true,
-      data: client
+      data: client,
     });
   } catch (error) {
     next(error);
@@ -115,43 +120,51 @@ exports.createClient = async (req, res, next) => {
       preferences,
       notes,
       subscribesToNewsletter,
-      howDidYouFindUs
+      howDidYouFindUs,
     } = req.body;
-    
+
     // Verificar si ya existe cliente con mismo email o documento
-    const existingClient = await Client.findOne({ 
-      $or: [
-        { email: email.toLowerCase() },
-        { document: document }
-      ]
+    const existingClient = await Client.findOne({
+      $or: [{ email: email.toLowerCase() }, { document: document }],
     });
-    
+
     if (existingClient) {
       return res.status(400).json({
         success: false,
-        message: 'Ya existe un cliente con este email o documento'
+        message: "Ya existe un cliente con este email o documento",
       });
     }
-    
+
     // Crear nuevo cliente
     const client = await Client.create({
       name,
       email: email.toLowerCase(),
       phone,
       document,
-      documentType: documentType || 'DNI',
+      documentType: documentType || "DNI",
       birthDate,
       addresses: addresses || [],
       preferences: preferences || {},
       notes,
       subscribesToNewsletter: subscribesToNewsletter || false,
-      howDidYouFindUs: howDidYouFindUs || 'other'
+      howDidYouFindUs: howDidYouFindUs || "other",
     });
-    
+
+    await auditService.logAction({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      userRole: "admin",
+      action: "CREATE",
+      entity: "Client",
+      entityId: client._id,
+      newData: { name: client.name, email: client.email },
+      req,
+    });
+
     res.status(201).json({
       success: true,
       data: client,
-      message: 'Cliente creado exitosamente'
+      message: "Cliente creado exitosamente",
     });
   } catch (error) {
     next(error);
@@ -165,51 +178,73 @@ exports.updateClient = async (req, res, next) => {
   try {
     // Campos permitidos para actualización
     const allowedFields = [
-      'name', 'email', 'phone', 'document',
-      'documentType', 'birthDate', 'addresses',
-      'preferences', 'isActive', 'isVip', 'notes', 
-      'subscribesToNewsletter', 'howDidYouFindUs', 'clientCategory'
+      "name",
+      "email",
+      "phone",
+      "document",
+      "documentType",
+      "birthDate",
+      "addresses",
+      "preferences",
+      "isActive",
+      "isVip",
+      "notes",
+      "subscribesToNewsletter",
+      "howDidYouFindUs",
+      "clientCategory",
     ];
-    
+
     const filteredBody = filterObj(req.body, ...allowedFields);
-    
+
     // Validar email único si se está actualizando
     if (filteredBody.email) {
       filteredBody.email = filteredBody.email.toLowerCase();
       const existingClient = await Client.findOne({
         email: filteredBody.email,
-        _id: { $ne: req.params.id }
+        _id: { $ne: req.params.id },
       });
-      
+
       if (existingClient) {
         return res.status(400).json({
           success: false,
-          message: 'Ya existe otro cliente con este email'
+          message: "Ya existe otro cliente con este email",
         });
       }
     }
-    
+
+    const oldClient = await Client.findById(req.params.id).lean();
+
     // Actualizar cliente
-    const client = await Client.findByIdAndUpdate(
-      req.params.id,
-      filteredBody,
-      {
-        new: true,
-        runValidators: true
-      }
-    );
-    
+    const client = await Client.findByIdAndUpdate(req.params.id, filteredBody, {
+      new: true,
+      runValidators: true,
+    });
+
     if (!client) {
       return res.status(404).json({
         success: false,
-        message: 'Cliente no encontrado'
+        message: "Cliente no encontrado",
       });
     }
-    
+
+    const changes = auditService.computeChanges(oldClient, client.toObject());
+    await auditService.logAction({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      userRole: req.user.isAdmin ? "admin" : "user",
+      action: "UPDATE",
+      entity: "Client",
+      entityId: client._id,
+      oldData: oldClient,
+      newData: client.toObject(),
+      changes,
+      req,
+    });
+
     res.status(200).json({
       success: true,
       data: client,
-      message: 'Cliente actualizado exitosamente'
+      message: "Cliente actualizado exitosamente",
     });
   } catch (error) {
     next(error);
@@ -222,30 +257,42 @@ exports.updateClient = async (req, res, next) => {
 exports.deleteClient = async (req, res, next) => {
   try {
     const client = await Client.findById(req.params.id);
-    
+
     if (!client) {
       return res.status(404).json({
         success: false,
-        message: 'Cliente no encontrado'
+        message: "Cliente no encontrado",
       });
     }
-    
+
     // Verificar si tiene ventas asociadas
     const hasSales = await Sale.countDocuments({ clientId: client._id });
     if (hasSales > 0) {
       return res.status(400).json({
         success: false,
-        message: `No se puede eliminar el cliente porque tiene ${hasSales} ventas asociadas`
+        message: `No se puede eliminar el cliente porque tiene ${hasSales} ventas asociadas`,
       });
     }
-    
+
     // Soft delete - solo desactivar
     client.isActive = false;
     await client.save();
-    
+
+    await auditService.logAction({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      userRole: "admin",
+      action: "DELETE",
+      entity: "Client",
+      entityId: client._id,
+      oldData: { isActive: true },
+      newData: { isActive: false },
+      req,
+    });
+
     res.status(200).json({
       success: true,
-      message: 'Cliente desactivado exitosamente'
+      message: "Cliente desactivado exitosamente",
     });
   } catch (error) {
     next(error);
@@ -258,34 +305,51 @@ exports.deleteClient = async (req, res, next) => {
 exports.enableCredit = async (req, res, next) => {
   try {
     const { creditLimit } = req.body;
-    
+
     if (!creditLimit || creditLimit <= 0) {
       return res.status(400).json({
         success: false,
-        message: 'El límite de crédito debe ser mayor a 0'
+        message: "El límite de crédito debe ser mayor a 0",
       });
     }
-    
+
     const client = await Client.findById(req.params.id);
     if (!client) {
       return res.status(404).json({
         success: false,
-        message: 'Cliente no encontrado'
+        message: "Cliente no encontrado",
       });
     }
-    
+
+    const oldCredit = {
+      isEnabled: client.creditAccount.isEnabled,
+      creditLimit: client.creditAccount.creditLimit,
+    };
+
     // Habilitar cuenta corriente
     client.creditAccount.isEnabled = true;
     client.creditAccount.creditLimit = creditLimit;
     client.creditAccount.balance = 0;
     client.creditAccount.activationDate = new Date();
-    
+
     await client.save();
-    
+
+    await auditService.logAction({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      userRole: "admin",
+      action: "ENABLE_CREDIT",
+      entity: "Client",
+      entityId: client._id,
+      oldData: oldCredit,
+      newData: { isEnabled: true, creditLimit: req.body.creditLimit },
+      req,
+    });
+
     res.status(200).json({
       success: true,
       data: client.creditAccount,
-      message: 'Cuenta corriente habilitada exitosamente'
+      message: "Cuenta corriente habilitada exitosamente",
     });
   } catch (error) {
     next(error);
@@ -301,24 +365,42 @@ exports.disableCredit = async (req, res, next) => {
     if (!client) {
       return res.status(404).json({
         success: false,
-        message: 'Cliente no encontrado'
+        message: "Cliente no encontrado",
       });
     }
-    
+
+    const oldCredit = {
+      isEnabled: client.creditAccount.isEnabled,
+      creditLimit: client.creditAccount.creditLimit,
+    };
+
     // Verificar si tiene saldo pendiente
     if (client.creditAccount.balance > 0) {
       return res.status(400).json({
         success: false,
-        message: 'No se puede deshabilitar la cuenta corriente porque tiene saldo pendiente'
+        message:
+          "No se puede deshabilitar la cuenta corriente porque tiene saldo pendiente",
       });
     }
-    
+
     client.creditAccount.isEnabled = false;
     await client.save();
-    
+
+    await auditService.logAction({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      userRole: "admin",
+      action: "DISABLE_CREDIT",
+      entity: "Client",
+      entityId: client._id,
+      oldData: oldCredit,
+      newData: { isEnabled: false },
+      req,
+    });
+
     res.status(200).json({
       success: true,
-      message: 'Cuenta corriente deshabilitada exitosamente'
+      message: "Cuenta corriente deshabilitada exitosamente",
     });
   } catch (error) {
     next(error);
@@ -331,27 +413,43 @@ exports.disableCredit = async (req, res, next) => {
 exports.registerCreditPayment = async (req, res, next) => {
   try {
     const { amount, description, referenceId } = req.body;
-    
+
     if (!amount || amount <= 0) {
       return res.status(400).json({
         success: false,
-        message: 'El monto debe ser mayor a 0'
+        message: "El monto debe ser mayor a 0",
       });
     }
-    
+
     // Usar el servicio de crédito para registrar el pago
     const result = await creditService.registerPayment(
       req.params.id,
       amount,
       description,
       referenceId,
-      req.user.id
+      req.user.id,
     );
-    
+
+    await auditService.logAction({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      userRole: "admin",
+      action: "REGISTER_PAYMENT",
+      entity: "Client",
+      entityId: req.params._id,
+      changes: [
+        {
+          oldValue: result.saldo_anterior,
+          newValue: result.saldo_actual,
+        },
+      ],
+      req,
+    });
+
     res.status(200).json({
       success: true,
       data: result,
-      message: 'Pago registrado exitosamente'
+      message: "Pago registrado exitosamente",
     });
   } catch (error) {
     next(error);
@@ -364,10 +462,10 @@ exports.registerCreditPayment = async (req, res, next) => {
 exports.getCreditSummary = async (req, res, next) => {
   try {
     const summary = await creditService.getCreditSummary(req.params.id);
-    
+
     res.status(200).json({
       success: true,
-      data: summary
+      data: summary,
     });
   } catch (error) {
     next(error);
@@ -380,19 +478,22 @@ exports.getCreditSummary = async (req, res, next) => {
 exports.checkCreditLimit = async (req, res, next) => {
   try {
     const { amount } = req.query;
-    
+
     if (!amount || amount <= 0) {
       return res.status(400).json({
         success: false,
-        message: 'El monto es requerido y debe ser mayor a 0'
+        message: "El monto es requerido y debe ser mayor a 0",
       });
     }
-    
-    const result = await creditService.checkCreditBeforeSale(req.params.id, parseFloat(amount));
-    
+
+    const result = await creditService.checkCreditBeforeSale(
+      req.params.id,
+      parseFloat(amount),
+    );
+
     res.status(200).json({
       success: true,
-      data: result
+      data: result,
     });
   } catch (error) {
     next(error);
@@ -405,43 +506,51 @@ exports.checkCreditLimit = async (req, res, next) => {
 exports.getPurchaseHistory = async (req, res, next) => {
   try {
     const { startDate, endDate, status, page = 1, limit = 10 } = req.query;
-    
+
     const client = await Client.findById(req.params.id);
     if (!client) {
       return res.status(404).json({
         success: false,
-        message: 'Cliente no encontrado'
+        message: "Cliente no encontrado",
       });
     }
-    
+
     // Obtener historial de compras
     let purchaseHistory = [...client.purchaseHistory];
-    
+
     // Filtrar por fecha
     if (startDate) {
-      purchaseHistory = purchaseHistory.filter(p => new Date(p.date) >= new Date(startDate));
+      purchaseHistory = purchaseHistory.filter(
+        (p) => new Date(p.date) >= new Date(startDate),
+      );
     }
     if (endDate) {
-      purchaseHistory = purchaseHistory.filter(p => new Date(p.date) <= new Date(endDate));
+      purchaseHistory = purchaseHistory.filter(
+        (p) => new Date(p.date) <= new Date(endDate),
+      );
     }
-    
+
     // Filtrar por estado
     if (status) {
-      purchaseHistory = purchaseHistory.filter(p => p.status === status);
+      purchaseHistory = purchaseHistory.filter((p) => p.status === status);
     }
-    
+
     // Ordenar por fecha descendente (más reciente primero)
     purchaseHistory.sort((a, b) => new Date(b.date) - new Date(a.date));
-    
+
     // Paginación
     const total = purchaseHistory.length;
-    const { skip, limit: limitValue, page: currentPage } = paginate(page, limit);
+    const {
+      skip,
+      limit: limitValue,
+      page: currentPage,
+    } = paginate(page, limit);
     const paginatedHistory = purchaseHistory.slice(skip, skip + limitValue);
-    
+
     res.status(200).json({
       success: true,
       data: paginatedHistory,
-      pagination: formatPagination(total, currentPage, limitValue)
+      pagination: formatPagination(total, currentPage, limitValue),
     });
   } catch (error) {
     next(error);
@@ -456,20 +565,22 @@ exports.getCreditRiskClients = async (req, res, next) => {
     const { percentage = 80 } = req.query;
     // Usar método estático del modelo
     const clients = await Client.getClientsWithCreditRisk(parseInt(percentage));
-    
+
     // Enriquecer con información adicional usando creditService si es necesario
-    const clientsWithDetails = await Promise.all(clients.map(async (client) => {
-      const summary = await creditService.getCreditSummary(client._id);
-      return {
-        ...client.toObject(),
-        creditSummary: summary
-      };
-    }));
-    
+    const clientsWithDetails = await Promise.all(
+      clients.map(async (client) => {
+        const summary = await creditService.getCreditSummary(client._id);
+        return {
+          ...client.toObject(),
+          creditSummary: summary,
+        };
+      }),
+    );
+
     res.status(200).json({
       success: true,
       data: clientsWithDetails,
-      total: clientsWithDetails.length
+      total: clientsWithDetails.length,
     });
   } catch (error) {
     next(error);
@@ -486,33 +597,35 @@ exports.getClientStats = async (req, res, next) => {
     const activeClients = await Client.countDocuments({ isActive: true });
     const inactiveClients = totalClients - activeClients;
     const vipClients = await Client.countDocuments({ isVip: true });
-    const creditEnabled = await Client.countDocuments({ 'creditAccount.isEnabled': true });
-    
+    const creditEnabled = await Client.countDocuments({
+      "creditAccount.isEnabled": true,
+    });
+
     // Distribución por categoría
     const categories = await Client.aggregate([
-      { $group: { _id: '$clientCategory', count: { $sum: 1 } } }
+      { $group: { _id: "$clientCategory", count: { $sum: 1 } } },
     ]);
-    
+
     // Total gastado acumulado
     const totalSpent = await Client.aggregate([
-      { $group: { _id: null, total: { $sum: '$totalSpent' } } }
+      { $group: { _id: null, total: { $sum: "$totalSpent" } } },
     ]);
-    
+
     // Promedio de gasto por cliente
     const averageSpent = totalSpent[0]?.total / totalClients || 0;
-    
+
     // Deuda total de clientes
     const clientsWithDebt = await Client.aggregate([
-      { $match: { 'creditAccount.balance': { $gt: 0 } } },
-      { $group: { _id: null, totalDebt: { $sum: '$creditAccount.balance' } } }
+      { $match: { "creditAccount.balance": { $gt: 0 } } },
+      { $group: { _id: null, totalDebt: { $sum: "$creditAccount.balance" } } },
     ]);
-    
+
     // Clientes que han alcanzado el límite de crédito
     const clientsAtLimit = await Client.countDocuments({
-      'creditAccount.isEnabled': true,
-      $expr: { $gte: ['$creditAccount.balance', '$creditAccount.creditLimit'] }
+      "creditAccount.isEnabled": true,
+      $expr: { $gte: ["$creditAccount.balance", "$creditAccount.creditLimit"] },
     });
-    
+
     res.status(200).json({
       success: true,
       data: {
@@ -525,8 +638,8 @@ exports.getClientStats = async (req, res, next) => {
         categoryDistribution: categories,
         totalSpentAccumulated: totalSpent[0]?.total || 0,
         averageSpentPerClient: averageSpent,
-        totalClientDebt: clientsWithDebt[0]?.totalDebt || 0
-      }
+        totalClientDebt: clientsWithDebt[0]?.totalDebt || 0,
+      },
     });
   } catch (error) {
     next(error);
@@ -538,23 +651,34 @@ exports.getClientStats = async (req, res, next) => {
 // @access  Private/Admin
 exports.addAddress = async (req, res, next) => {
   try {
-    const { street, number, floor, apartment, locality, city, province, zipCode, label, isMain } = req.body;
-    
+    const {
+      street,
+      number,
+      floor,
+      apartment,
+      locality,
+      city,
+      province,
+      zipCode,
+      label,
+      isMain,
+    } = req.body;
+
     const client = await Client.findById(req.params.id);
     if (!client) {
       return res.status(404).json({
         success: false,
-        message: 'Cliente no encontrado'
+        message: "Cliente no encontrado",
       });
     }
-    
+
     // Si la nueva dirección es principal, quitar el flag de otras direcciones
     if (isMain) {
-      client.addresses.forEach(addr => {
+      client.addresses.forEach((addr) => {
         addr.isMain = false;
       });
     }
-    
+
     // Agregar nueva dirección
     client.addresses.push({
       street,
@@ -565,16 +689,27 @@ exports.addAddress = async (req, res, next) => {
       city,
       province,
       zipCode,
-      label: label || 'home',
-      isMain: isMain || false
+      label: label || "home",
+      isMain: isMain || false,
     });
-    
+
     await client.save();
-    
+
+    await auditService.logAction({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      userRole: "admin",
+      action: "ADD_ADDRESS",
+      entity: "Client",
+      entityId: client._id,
+      newData: { newAddress: client.addresses[client.addresses.length - 1] },
+      req,
+    });
+
     res.status(201).json({
       success: true,
       data: client.addresses,
-      message: 'Dirección agregada exitosamente'
+      message: "Dirección agregada exitosamente",
     });
   } catch (error) {
     next(error);
@@ -588,44 +723,63 @@ exports.updateAddress = async (req, res, next) => {
   try {
     const { id, addressId } = req.params;
     const updateData = req.body;
-    
+
     const client = await Client.findById(id);
     if (!client) {
       return res.status(404).json({
         success: false,
-        message: 'Cliente no encontrado'
+        message: "Cliente no encontrado",
       });
     }
-    
+
+    const oldClient = await Client.findById(req.params.id).lean();
+
     // Encontrar la dirección
     const address = client.addresses.id(addressId);
     if (!address) {
       return res.status(404).json({
         success: false,
-        message: 'Dirección no encontrada'
+        message: "Dirección no encontrada",
       });
     }
-    
+
     // Si se está marcando como principal, actualizar otras direcciones
     if (updateData.isMain) {
-      client.addresses.forEach(addr => {
+      client.addresses.forEach((addr) => {
         addr.isMain = false;
       });
     }
-    
+
     // Actualizar campos
-    Object.keys(updateData).forEach(key => {
-      if (key !== '_id') {
+    Object.keys(updateData).forEach((key) => {
+      if (key !== "_id") {
         address[key] = updateData[key];
       }
     });
-    
+
     await client.save();
-    
+
+    const changes = auditService.computeChanges(
+      oldClient.addresses,
+      client.addresses,
+    );
+    await auditService.logAction({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      userRole: req.user.isAdmin ? "admin" : "user",
+      action: "UPDATE_ADDRESS",
+      entity: "Client",
+      entityId: client._id,
+      oldData: oldClient.addresses,
+      newData: client.addresses,
+      changes,
+      req,
+    });
+
     res.status(200).json({
       success: true,
       data: client.addresses,
-      message: 'Dirección actualizada exitosamente'
+      message: "Dirección actualizada exitosamente",
     });
   } catch (error) {
     next(error);
@@ -638,23 +792,34 @@ exports.updateAddress = async (req, res, next) => {
 exports.deleteAddress = async (req, res, next) => {
   try {
     const { id, addressId } = req.params;
-    
+
     const client = await Client.findById(id);
     if (!client) {
       return res.status(404).json({
         success: false,
-        message: 'Cliente no encontrado'
+        message: "Cliente no encontrado",
       });
     }
-    
+
     // Eliminar dirección
     client.addresses.id(addressId).remove();
     await client.save();
-    
+
+    await auditService.logAction({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      userRole: "admin",
+      action: "DELETE",
+      entity: "Supplier",
+      entityId: supplier._id,
+      removedData: { address: client.addresses.id(addressId) },
+      req,
+    });
+
     res.status(200).json({
       success: true,
       data: client.addresses,
-      message: 'Dirección eliminada exitosamente'
+      message: "Dirección eliminada exitosamente",
     });
   } catch (error) {
     next(error);
@@ -666,31 +831,59 @@ exports.deleteAddress = async (req, res, next) => {
 // @access  Private/Admin
 exports.updatePreferences = async (req, res, next) => {
   try {
-    const { sizes, favoriteColors, preferredCategories, favoriteBrands, shoeSize, pantsSize, observations } = req.body;
-    
+    const {
+      sizes,
+      favoriteColors,
+      preferredCategories,
+      favoriteBrands,
+      shoeSize,
+      pantsSize,
+      observations,
+    } = req.body;
+
+    const oldClient = await Client.findById(req.params.id).lean();
+
     const client = await Client.findById(req.params.id);
     if (!client) {
       return res.status(404).json({
         success: false,
-        message: 'Cliente no encontrado'
+        message: "Cliente no encontrado",
       });
     }
-    
+
     // Actualizar preferencias
     if (sizes) client.preferences.sizes = sizes;
     if (favoriteColors) client.preferences.favoriteColors = favoriteColors;
-    if (preferredCategories) client.preferences.preferredCategories = preferredCategories;
+    if (preferredCategories)
+      client.preferences.preferredCategories = preferredCategories;
     if (favoriteBrands) client.preferences.favoriteBrands = favoriteBrands;
     if (shoeSize) client.preferences.shoeSize = shoeSize;
     if (pantsSize) client.preferences.pantsSize = pantsSize;
     if (observations) client.preferences.observations = observations;
-    
+
     await client.save();
-    
+
+    const changes = auditService.computeChanges(
+      oldClient.preferences,
+      client.preferences,
+    );
+    await auditService.logAction({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      userRole: req.user.isAdmin ? "admin" : "user",
+      action: "UPDATE_PREFERENCES",
+      entity: "Client",
+      entityId: client._id,
+      oldData: oldClient.preferences,
+      newData: client.preferences,
+      changes,
+      req,
+    });
+
     res.status(200).json({
       success: true,
       data: client.preferences,
-      message: 'Preferencias actualizadas exitosamente'
+      message: "Preferencias actualizadas exitosamente",
     });
   } catch (error) {
     next(error);

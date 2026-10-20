@@ -1,6 +1,7 @@
-const Category = require('../models/Category');
-const Product = require('../models/Product');
-const { filterObj, paginate, formatPagination } = require('../utils/helpers');
+const Category = require("../models/Category");
+const Product = require("../models/Product");
+const { filterObj, paginate, formatPagination } = require("../utils/helpers");
+const auditService = require("../services/auditService");
 
 // @desc    Obtener todas las categorías
 // @route   GET /api/categories
@@ -8,56 +9,67 @@ const { filterObj, paginate, formatPagination } = require('../utils/helpers');
 exports.getCategories = async (req, res, next) => {
   try {
     const { page = 1, limit = 10, isActive, tree, forSelect } = req.query;
-    
+
     // Si solicita el árbol de categorías (estructura jerárquica completa)
-    if (tree === 'true') {
+    if (tree === "true") {
       const categoryTree = await Category.getCategoryTree();
       return res.status(200).json({
         success: true,
-        data: categoryTree
+        data: categoryTree,
       });
     }
-    
+
     // Si solicita opciones para select (formularios con formato plano)
-    if (forSelect === 'true') {
-      const options = await Category.getForSelect(isActive === 'false');
+    if (forSelect === "true") {
+      const options = await Category.getForSelect(isActive === "false");
       return res.status(200).json({
         success: true,
-        data: options
+        data: options,
       });
     }
-    
+
     // Paginación normal de categorías
     const filter = {};
-    if (isActive !== undefined) filter.isActive = isActive === 'true';
-    
-    const { skip, limit: limitValue, page: currentPage } = paginate(page, limit);
-    
+    if (isActive !== undefined) filter.isActive = isActive === "true";
+
+    const {
+      skip,
+      limit: limitValue,
+      page: currentPage,
+    } = paginate(page, limit);
+
     const categories = await Category.find(filter)
-      .populate('parentId', 'name level slug')
+      .populate("parentId", "name level slug")
       .sort({ level: 1, order: 1, name: 1 })
       .skip(skip)
       .limit(limitValue);
-    
+
     // Contar subcategorías y productos para cada categoría
-    const categoriesWithCount = await Promise.all(categories.map(async (cat) => {
-      const subcategoriesCount = await Category.countDocuments({ parentId: cat._id });
-      const productsCount = await Product.countDocuments({ categoryId: cat._id, isActive: true });
-      
-      return {
-        ...cat.toObject(),
-        subcategoriesCount,
-        productsCount
-      };
-    }));
-    
+    const categoriesWithCount = await Promise.all(
+      categories.map(async (cat) => {
+        const subcategoriesCount = await Category.countDocuments({
+          parentId: cat._id,
+        });
+        const productsCount = await Product.countDocuments({
+          categoryId: cat._id,
+          isActive: true,
+        });
+
+        return {
+          ...cat.toObject(),
+          subcategoriesCount,
+          productsCount,
+        };
+      }),
+    );
+
     const total = await Category.countDocuments(filter);
     const pagination = formatPagination(total, currentPage, limitValue);
-    
+
     res.status(200).json({
       success: true,
       data: categoriesWithCount,
-      pagination
+      pagination,
     });
   } catch (error) {
     next(error);
@@ -69,32 +81,34 @@ exports.getCategories = async (req, res, next) => {
 // @access  Private
 exports.getCategoryById = async (req, res, next) => {
   try {
-    const category = await Category.findById(req.params.id)
-      .populate('parentId', 'name level slug');
-    
+    const category = await Category.findById(req.params.id).populate(
+      "parentId",
+      "name level slug",
+    );
+
     if (!category) {
       return res.status(404).json({
         success: false,
-        message: 'Categoría no encontrada'
+        message: "Categoría no encontrada",
       });
     }
-    
+
     // Obtener subcategorías activas
-    const subcategories = await Category.find({ 
-      parentId: category._id, 
-      isActive: true 
+    const subcategories = await Category.find({
+      parentId: category._id,
+      isActive: true,
     }).sort({ order: 1, name: 1 });
-    
+
     // Obtener breadcrumb (ruta de navegación)
     const breadcrumb = await category.getBreadcrumb();
-    
+
     res.status(200).json({
       success: true,
       data: {
         ...category.toObject(),
         subcategories,
-        breadcrumb
-      }
+        breadcrumb,
+      },
     });
   } catch (error) {
     next(error);
@@ -106,53 +120,65 @@ exports.getCategoryById = async (req, res, next) => {
 // @access  Private/Admin
 exports.createCategory = async (req, res, next) => {
   try {
-    const { name, description, image, parentId, order, isFeatured, icon } = req.body;
-    
+    const { name, description, image, parentId, order, isFeatured, icon } =
+      req.body;
+
     // Verificar si ya existe una categoría con el mismo nombre
-    const existingCategory = await Category.findOne({ 
-      name: name.toUpperCase() 
+    const existingCategory = await Category.findOne({
+      name: name.toUpperCase(),
     });
-    
+
     if (existingCategory) {
       return res.status(400).json({
         success: false,
-        message: 'Ya existe una categoría con este nombre'
+        message: "Ya existe una categoría con este nombre",
       });
     }
-    
+
     // Si tiene padre, verificar que exista
     if (parentId) {
       const parent = await Category.findById(parentId);
       if (!parent) {
         return res.status(404).json({
           success: false,
-          message: 'La categoría padre no existe'
+          message: "La categoría padre no existe",
         });
       }
-      
+
       // Verificar nivel máximo (5 niveles permitidos, level 0-4, máximo 4 como padre)
       if (parent.level >= 4) {
         return res.status(400).json({
           success: false,
-          message: 'No se pueden crear más de 5 niveles de categorías'
+          message: "No se pueden crear más de 5 niveles de categorías",
         });
       }
     }
-    
+
     const category = await Category.create({
       name: name.toUpperCase(),
       description,
-      image: image || 'https://via.placeholder.com/150',
+      image: image || "https://via.placeholder.com/150",
       parentId: parentId || null,
       order: order || 0,
       isFeatured: isFeatured || false,
-      icon: icon || ''
+      icon: icon || "",
     });
-    
+
+    await auditService.logAction({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      userRole: req.user.isAdmin ? "admin" : "user",
+      action: "CREATE",
+      entity: "Category",
+      entityId: category._id,
+      newData: { name: category.name, parentId: category.parentId },
+      req,
+    });
+
     res.status(201).json({
       success: true,
       data: category,
-      message: 'Categoría creada exitosamente'
+      message: "Categoría creada exitosamente",
     });
   } catch (error) {
     next(error);
@@ -164,35 +190,44 @@ exports.createCategory = async (req, res, next) => {
 // @access  Private/Admin
 exports.updateCategory = async (req, res, next) => {
   try {
-    const allowedFields = ['name', 'description', 'image', 'parentId', 'order', 'isActive', 'isFeatured', 'icon'];
+    const allowedFields = [
+      "name",
+      "description",
+      "image",
+      "parentId",
+      "order",
+      "isActive",
+      "isFeatured",
+      "icon",
+    ];
     const filteredBody = filterObj(req.body, ...allowedFields);
-    
+
     // Si está cambiando el nombre, verificar que no exista otra con el mismo
     if (filteredBody.name) {
       filteredBody.name = filteredBody.name.toUpperCase();
-      const existingCategory = await Category.findOne({ 
+      const existingCategory = await Category.findOne({
         name: filteredBody.name,
-        _id: { $ne: req.params.id }
+        _id: { $ne: req.params.id },
       });
-      
+
       if (existingCategory) {
         return res.status(400).json({
           success: false,
-          message: 'Ya existe otra categoría con este nombre'
+          message: "Ya existe otra categoría con este nombre",
         });
       }
     }
-    
+
     // Si cambia el padre, verificar que no se cree un ciclo
     if (filteredBody.parentId) {
       // No puede ser su propio padre
       if (filteredBody.parentId === req.params.id) {
         return res.status(400).json({
           success: false,
-          message: 'Una categoría no puede ser padre de sí misma'
+          message: "Una categoría no puede ser padre de sí misma",
         });
       }
-      
+
       // Verificar que el padre no sea un descendiente (evitar ciclos)
       const category = await Category.findById(req.params.id);
       if (category) {
@@ -202,37 +237,59 @@ exports.updateCategory = async (req, res, next) => {
           const parent = await Category.findById(parentId);
           return parent ? checkDescendant(parent.parentId, targetId) : false;
         };
-        
-        const isDescendant = await checkDescendant(filteredBody.parentId, req.params.id);
+
+        const isDescendant = await checkDescendant(
+          filteredBody.parentId,
+          req.params.id,
+        );
         if (isDescendant) {
           return res.status(400).json({
             success: false,
-            message: 'No se puede asignar una subcategoría como padre'
+            message: "No se puede asignar una subcategoría como padre",
           });
         }
       }
     }
-    
+
+    const oldCategory = await Category.findById(req.params.id).lean();
+
     const category = await Category.findByIdAndUpdate(
       req.params.id,
       filteredBody,
       {
         new: true,
-        runValidators: true
-      }
+        runValidators: true,
+      },
     );
-    
+
     if (!category) {
       return res.status(404).json({
         success: false,
-        message: 'Categoría no encontrada'
+        message: "Categoría no encontrada",
       });
     }
-    
+
+    const changes = auditService.computeChanges(
+      oldCategory,
+      category.toObject(),
+    );
+    await auditService.logAction({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      userRole: req.user.isAdmin ? "admin" : "user",
+      action: "UPDATE",
+      entity: "Category",
+      entityId: category._id,
+      oldData: oldCategory,
+      newData: category.toObject(),
+      changes,
+      req,
+    });
+
     res.status(200).json({
       success: true,
       data: category,
-      message: 'Categoría actualizada exitosamente'
+      message: "Categoría actualizada exitosamente",
     });
   } catch (error) {
     next(error);
@@ -245,39 +302,54 @@ exports.updateCategory = async (req, res, next) => {
 exports.deleteCategory = async (req, res, next) => {
   try {
     const category = await Category.findById(req.params.id);
-    
+
     if (!category) {
       return res.status(404).json({
         success: false,
-        message: 'Categoría no encontrada'
+        message: "Categoría no encontrada",
       });
     }
-    
+
     // Verificar si tiene productos asociados
     const hasProducts = await category.hasProducts();
     if (hasProducts) {
       return res.status(400).json({
         success: false,
-        message: 'No se puede eliminar la categoría porque tiene productos asociados'
+        message:
+          "No se puede eliminar la categoría porque tiene productos asociados",
       });
     }
-    
+
     // Verificar si tiene subcategorías
-    const hasSubcategories = await Category.countDocuments({ parentId: category._id });
+    const hasSubcategories = await Category.countDocuments({
+      parentId: category._id,
+    });
     if (hasSubcategories > 0) {
       return res.status(400).json({
         success: false,
-        message: 'No se puede eliminar la categoría porque tiene subcategorías'
+        message: "No se puede eliminar la categoría porque tiene subcategorías",
       });
     }
-    
+
     // Soft delete - solo desactivar
     category.isActive = false;
     await category.save();
-    
+
+    await auditService.logAction({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      userRole: "admin",
+      action: "DELETE",
+      entity: "Category",
+      entityId: category._id,
+      oldData: { isActive: true },
+      newData: { isActive: false },
+      req,
+    });
+
     res.status(200).json({
       success: true,
-      message: 'Categoría desactivada exitosamente'
+      message: "Categoría desactivada exitosamente",
     });
   } catch (error) {
     next(error);
@@ -290,37 +362,51 @@ exports.deleteCategory = async (req, res, next) => {
 exports.permanentDeleteCategory = async (req, res, next) => {
   try {
     const category = await Category.findById(req.params.id);
-    
+
     if (!category) {
       return res.status(404).json({
         success: false,
-        message: 'Categoría no encontrada'
+        message: "Categoría no encontrada",
       });
     }
-    
+
     // Verificar si tiene productos asociados
     const hasProducts = await category.hasProducts();
     if (hasProducts) {
       return res.status(400).json({
         success: false,
-        message: 'No se puede eliminar la categoría porque tiene productos asociados'
+        message:
+          "No se puede eliminar la categoría porque tiene productos asociados",
       });
     }
-    
+
     // Verificar si tiene subcategorías
-    const hasSubcategories = await Category.countDocuments({ parentId: category._id });
+    const hasSubcategories = await Category.countDocuments({
+      parentId: category._id,
+    });
     if (hasSubcategories > 0) {
       return res.status(400).json({
         success: false,
-        message: 'No se puede eliminar la categoría porque tiene subcategorías'
+        message: "No se puede eliminar la categoría porque tiene subcategorías",
       });
     }
-    
+
     await category.deleteOne();
-    
+
+    await auditService.logAction({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      userRole: "admin",
+      action: "PERMANENT_DELETE",
+      entity: "Category",
+      entityId: category._id,
+      oldData: { category: category.toObject() },
+      req,
+    });
+
     res.status(200).json({
       success: true,
-      message: 'Categoría eliminada permanentemente'
+      message: "Categoría eliminada permanentemente",
     });
   } catch (error) {
     next(error);
@@ -333,22 +419,36 @@ exports.permanentDeleteCategory = async (req, res, next) => {
 exports.reorderCategories = async (req, res, next) => {
   try {
     const { categories } = req.body; // Array de { id, order }
-    
+
     if (!Array.isArray(categories)) {
       return res.status(400).json({
         success: false,
-        message: 'Se requiere un array de categorías'
+        message: "Se requiere un array de categorías",
       });
     }
-    
+
     // Actualizar el orden de cada categoría
     for (const item of categories) {
       await Category.findByIdAndUpdate(item.id, { order: item.order });
     }
-    
+
+    await auditService.logAction({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      userRole: "admin",
+      action: "REORDER",
+      entity: "Category",
+      entityId: null,
+      newData: {
+        reorderedIds: categories.map((c) => c.id),
+        newOrders: categories.map((c) => c.order),
+      },
+      req,
+    });
+
     res.status(200).json({
       success: true,
-      message: 'Orden actualizado exitosamente'
+      message: "Orden actualizado exitosamente",
     });
   } catch (error) {
     next(error);
@@ -363,46 +463,48 @@ exports.getCategoryStats = async (req, res, next) => {
     const totalCategories = await Category.countDocuments();
     const activeCategories = await Category.countDocuments({ isActive: true });
     const inactiveCategories = totalCategories - activeCategories;
-    const featuredCategories = await Category.countDocuments({ isFeatured: true });
-    
+    const featuredCategories = await Category.countDocuments({
+      isFeatured: true,
+    });
+
     // Categorías con más productos (top 5)
     const categoriesWithMostProducts = await Category.aggregate([
       {
         $lookup: {
-          from: 'products',
-          localField: '_id',
-          foreignField: 'categoryId',
-          as: 'products'
-        }
+          from: "products",
+          localField: "_id",
+          foreignField: "categoryId",
+          as: "products",
+        },
       },
       {
         $project: {
           name: 1,
           level: 1,
-          totalProducts: { $size: '$products' }
-        }
+          totalProducts: { $size: "$products" },
+        },
       },
       {
-        $sort: { totalProducts: -1 }
+        $sort: { totalProducts: -1 },
       },
       {
-        $limit: 5
-      }
+        $limit: 5,
+      },
     ]);
-    
+
     // Distribución por nivel
     const levelDistribution = await Category.aggregate([
       {
         $group: {
-          _id: '$level',
-          count: { $sum: 1 }
-        }
+          _id: "$level",
+          count: { $sum: 1 },
+        },
       },
       {
-        $sort: { _id: 1 }
-      }
+        $sort: { _id: 1 },
+      },
     ]);
-    
+
     res.status(200).json({
       success: true,
       data: {
@@ -411,8 +513,8 @@ exports.getCategoryStats = async (req, res, next) => {
         inactive: inactiveCategories,
         featured: featuredCategories,
         categoriesWithMostProducts,
-        levelDistribution
-      }
+        levelDistribution,
+      },
     });
   } catch (error) {
     next(error);
@@ -425,23 +527,23 @@ exports.getCategoryStats = async (req, res, next) => {
 exports.getSubcategories = async (req, res, next) => {
   try {
     const category = await Category.findById(req.params.id);
-    
+
     if (!category) {
       return res.status(404).json({
         success: false,
-        message: 'Categoría no encontrada'
+        message: "Categoría no encontrada",
       });
     }
-    
-    const subcategories = await Category.find({ 
+
+    const subcategories = await Category.find({
       parentId: category._id,
-      isActive: true 
+      isActive: true,
     }).sort({ order: 1, name: 1 });
-    
+
     res.status(200).json({
       success: true,
       data: subcategories,
-      total: subcategories.length
+      total: subcategories.length,
     });
   } catch (error) {
     next(error);
@@ -454,19 +556,19 @@ exports.getSubcategories = async (req, res, next) => {
 exports.getCategoryBreadcrumb = async (req, res, next) => {
   try {
     const category = await Category.findById(req.params.id);
-    
+
     if (!category) {
       return res.status(404).json({
         success: false,
-        message: 'Categoría no encontrada'
+        message: "Categoría no encontrada",
       });
     }
-    
+
     const breadcrumb = await category.getBreadcrumb();
-    
+
     res.status(200).json({
       success: true,
-      data: breadcrumb
+      data: breadcrumb,
     });
   } catch (error) {
     next(error);
@@ -479,23 +581,23 @@ exports.getCategoryBreadcrumb = async (req, res, next) => {
 exports.toggleCategoryStatus = async (req, res, next) => {
   try {
     const category = await Category.findById(req.params.id);
-    
+
     if (!category) {
       return res.status(404).json({
         success: false,
-        message: 'Categoría no encontrada'
+        message: "Categoría no encontrada",
       });
     }
-    
+
     category.isActive = !category.isActive;
     await category.save();
-    
+
     res.status(200).json({
       success: true,
       data: {
-        isActive: category.isActive
+        isActive: category.isActive,
       },
-      message: `Categoría ${category.isActive ? 'activada' : 'desactivada'} exitosamente`
+      message: `Categoría ${category.isActive ? "activada" : "desactivada"} exitosamente`,
     });
   } catch (error) {
     next(error);

@@ -1,6 +1,5 @@
 const BankAccount = require('../models/BankAccount');
 const Sale = require('../models/Sale');
-const Payment = require('../models/Payment');
 
 // Servicio para gestión bancaria
 

@@ -1,40 +1,50 @@
 const Client = require('../models/Client');
-const nodemailer = require('nodemailer'); // Para alertas por email
+// const nodemailer = require('nodemailer'); // Descomentar si configuras el envío de emails
 
 // Verificar límite de crédito antes de una venta
-const checkCreditBeforeSale = async (clientId, montoCompra) => {
+const checkCreditBeforeSale = async (clientId, purchaseAmount) => {
   const client = await Client.findById(clientId);
   if (!client) {
     throw new Error('Cliente no encontrado');
   }
   
-  return client.checkCreditLimit(montoCompra);
+  // Usamos el método del modelo para verificar
+  return client.checkCreditLimit(purchaseAmount);
 };
 
 // Alertar por límite de crédito cercano o excedido
-const sendCreditAlert = async (clientId, porcentajeUmbral = 80) => {
+const sendCreditAlert = async (clientId, thresholdPercentage = 80) => {
   const client = await Client.findById(clientId);
-  if (!client || !client.cuenta_corriente.habilitada) return;
   
-  const porcentajeUsado = client.porcentaje_credito_usado;
+  if (!client) return { alertado: false, reason: 'Cliente no encontrado' };
   
-  if (porcentajeUsado >= porcentajeUmbral) {
-    // Aquí se puede enviar email, notificación push, etc.
-    console.log(`⚠️ ALERTA: Cliente ${client.nombre} ha usado el ${porcentajeUsado}% de su crédito`);
+  // Verificar si tiene cuenta corriente habilitada
+  if (!client.creditAccount.isEnabled) {
+    return { alertado: false, reason: 'Cuenta corriente no habilitada' };
+  }
+  
+  // Acceder al virtual percentage (definido en el modelo como creditUsagePercentage)
+  const porcentajeUsado = client.creditUsagePercentage;
+  
+  if (porcentajeUsado >= thresholdPercentage) {
+    const message = `⚠️ ALERTA: Cliente ${client.name} ha usado el ${porcentajeUsado.toFixed(2)}% de su crédito`;
+    console.log(message);
     
-    // Ejemplo de envío de email (requiere configuración SMTP)
+    // Ejemplo de envío de email (descomentar y configurar)
     // await sendEmail({
     //   to: client.email,
     //   subject: 'Alerta de límite de crédito',
-    //   html: `<p>Estimado ${client.nombre}, has utilizado el ${porcentajeUsado}% de tu límite de crédito.</p>`
+    //   html: `<p>Estimado ${client.name}, has utilizado el ${porcentajeUsado.toFixed(2)}% de tu límite de crédito.</p>`
     // });
     
     return {
       alertado: true,
-      cliente: client.nombre,
+      cliente: client.name,
+      email: client.email,
       porcentaje_usado: porcentajeUsado,
-      saldo_actual: client.cuenta_corriente.saldo,
-      limite: client.cuenta_corriente.limite_credito
+      saldo_actual: client.creditAccount.balance,
+      limite: client.creditAccount.creditLimit,
+      disponible: client.availableCredit
     };
   }
   
@@ -42,12 +52,16 @@ const sendCreditAlert = async (clientId, porcentajeUmbral = 80) => {
 };
 
 // Verificar automáticamente todos los clientes con crédito cercano al límite
-const checkAllCreditLimits = async (porcentajeUmbral = 80) => {
-  const clients = await Client.find({ 'cuenta_corriente.habilitada': true });
+const checkAllCreditLimits = async (thresholdPercentage = 80) => {
+  // Usamos el método estático del modelo si existe, o hacemos la búsqueda manual
+  // El modelo tiene: Client.getClientsWithCreditRisk(percentage)
+  
+  const clientsAtRisk = await Client.getClientsWithCreditRisk(thresholdPercentage);
   const alerts = [];
   
-  for (const client of clients) {
-    const alert = await sendCreditAlert(client._id, porcentajeUmbral);
+  for (const client of clientsAtRisk) {
+    // Llamamos a sendCreditAlert para cada uno para generar el reporte completo
+    const alert = await sendCreditAlert(client._id, thresholdPercentage);
     if (alert.alertado) {
       alerts.push(alert);
     }
@@ -57,68 +71,87 @@ const checkAllCreditLimits = async (porcentajeUmbral = 80) => {
 };
 
 // Registrar pago en cuenta corriente
-const registerPayment = async (clientId, monto, descripcion, referencia_id = null, usuario_id = null) => {
+const registerPayment = async (clientId, amount, description, referenceId = null, userId = null) => {
   const client = await Client.findById(clientId);
   if (!client) {
     throw new Error('Cliente no encontrado');
   }
   
-  if (!client.cuenta_corriente.habilitada) {
+  if (!client.creditAccount.isEnabled) {
     throw new Error('El cliente no tiene cuenta corriente habilitada');
   }
   
-  const movimiento = await client.addCreditMovement(
-    'pago',
-    monto,
-    descripcion,
-    referencia_id,
-    'Payment',
-    usuario_id
+  if (amount <= 0) {
+    throw new Error('El monto del pago debe ser mayor a 0');
+  }
+
+  const previousBalance = client.creditAccount.balance;
+  
+  // Usamos el método del modelo para agregar movimiento
+  // type: 'payment' (según enum del modelo)
+  const movement = await client.addCreditMovement(
+    'payment', 
+    amount, 
+    description, 
+    referenceId, 
+    'Payment', 
+    userId
   );
   
   return {
-    cliente: client.nombre,
-    saldo_anterior: client.cuenta_corriente.saldo + monto,
-    saldo_actual: client.cuenta_corriente.saldo,
-    movimiento
+    cliente: client.name,
+    saldo_anterior: previousBalance,
+    saldo_actual: client.creditAccount.balance,
+    movimiento: movement,
+    disponible_actual: client.availableCredit
   };
 };
 
 // Obtener resumen de cuenta corriente
 const getCreditSummary = async (clientId) => {
   const client = await Client.findById(clientId)
-    .populate('cuenta_corriente.movimientos.referencia_id');
+    .populate('creditAccount.movements.referenceId'); // Selecciona el refPath correcto
   
   if (!client) {
     throw new Error('Cliente no encontrado');
   }
   
-  // Obtener últimos 10 movimientos
-  const ultimosMovimientos = client.cuenta_corriente.movimientos
-    .sort((a, b) => b.fecha - a.fecha)
-    .slice(0, 10);
+  // Obtener últimos movimientos ordenados por fecha (descendente)
+  // Los movimientos están en un array, los ordenamos en memoria o en el agregado si fuera necesario
+  const movimientosOrdenados = [...client.creditAccount.movements].sort((a, b) => b.date - a.date);
+  const ultimosMovimientos = movimientosOrdenados.slice(0, 10);
   
   return {
     cliente: {
       id: client._id,
-      nombre: client.nombre,
+      nombre: client.name,
       email: client.email,
-      telefono: client.telefono
+      telefono: client.phone,
+      categoria: client.clientCategory,
+      es_vip: client.isVip
     },
     cuenta_corriente: {
-      habilitada: client.cuenta_corriente.habilitada,
-      limite: client.cuenta_corriente.limite_credito,
-      saldo_actual: client.cuenta_corriente.saldo,
-      saldo_disponible: client.saldo_disponible,
-      porcentaje_usado: client.porcentaje_credito_usado,
-      fecha_activacion: client.cuenta_corriente.fecha_activacion,
-      ultimo_movimiento: client.cuenta_corriente.fecha_ultimo_movimiento
+      habilitada: client.creditAccount.isEnabled,
+      limite: client.creditAccount.creditLimit,
+      saldo_actual: client.creditAccount.balance,
+      saldo_disponible: client.availableCredit, // Virtual
+      porcentaje_usado: client.creditUsagePercentage, // Virtual
+      fecha_activacion: client.creditAccount.activationDate,
+      ultimo_movimiento: client.creditAccount.lastMovementDate,
+      total_movimientos: client.creditAccount.movements.length
     },
-    ultimos_movimientos: ultimosMovimientos,
+    ultimos_movimientos: ultimosMovimientos.map(m => ({
+      fecha: m.date,
+      tipo: m.type,
+      monto: m.amount,
+      descripcion: m.description,
+      saldo_despues: m.balanceAfter,
+      referencia: m.referenceId // Ya populated si existe
+    })),
     estadisticas: {
-      total_compras: client.total_gastado,
-      categoria: client.categoria_cliente,
-      es_vip: client.vip
+      total_gastado: client.totalSpent,
+      ultima_compra: client.lastPurchase,
+      historial_compras_count: client.purchaseHistory.length
     }
   };
 };

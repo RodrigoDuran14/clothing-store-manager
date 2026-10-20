@@ -1,6 +1,7 @@
-const User = require("../models/User");
+const User = require("../models/user");
 const { createSendToken, verifyToken } = require("../utils/jwt");
 const { validationResult } = require("express-validator");
+const auditService = require("../services/auditService");
 
 // @desc    Registrar nuevo usuario
 // @route   POST /api/auth/register
@@ -16,10 +17,10 @@ exports.register = async (req, res, next) => {
       });
     }
 
-    const { nombre, email, password, telefono } = req.body;
+    const { name, email, password, phone, image } = req.body;
 
     // Verificar si el usuario ya existe
-    const userExists = await User.findOne({ email });
+    const userExists = await User.findOne({ email: email.toLowerCase() });
     if (userExists) {
       return res.status(400).json({
         success: false,
@@ -30,11 +31,23 @@ exports.register = async (req, res, next) => {
     // Crear usuario (los admins solo pueden crearse manualmente en BD)
     const user = await User.create({
       name,
-      email,
+      email: email.toLowerCase(),
       password,
-      phone,
-      admin: false, // Por defecto no es admin
+      phone: phone || '',
+      isAdmin: false, // Por defecto no es admin
+      image: image || `https://ui-avatars.com/api/?background=0D8F81&color=fff&bold=true&name=${encodeURIComponent(name)}`
     });
+
+    await auditService.logAction({
+          userId: user.id,
+          userEmail: user.email,
+          userRole: 'admin',
+          action: 'CREATE',
+          entity: 'User',
+          entityId: user._id,
+          newData: { name: user.name, email: user.email, isAdmin: user.isAdmin },
+          req
+        });
 
     createSendToken(user, 201, res);
   } catch (error) {
@@ -78,6 +91,19 @@ exports.login = async (req, res, next) => {
 
     // Actualizar último login
     user.lastLogin = Date.now();
+
+    // --- LOG ---
+    await auditService.logAction({
+      userId: user._id,
+      userEmail: user.email,
+      userRole: user.isAdmin ? "admin" : "user",
+      action: "LOGIN",
+      entity: "User",
+      entityId: user._id,
+      newData: { lastLogin: new Date() },
+      req,
+    });
+
     await user.save({ validateBeforeSave: false });
 
     createSendToken(user, 200, res);
@@ -102,85 +128,22 @@ exports.getMe = async (req, res, next) => {
   }
 };
 
-// @desc    Actualizar perfil propio
-// @route   PUT /api/auth/updateme
-// @access  Private
-exports.updateMe = async (req, res, next) => {
-  try {
-    // No permitir actualizar password aquí (tiene su propia ruta)
-    if (req.body.password) {
-      return res.status(400).json({
-        success: false,
-        message: "Para actualizar contraseña usa la ruta /updatepassword",
-      });
-    }
-
-    // Campos permitidos
-    const allowedFields = ["name", "phone", "image"];
-    const updates = {};
-
-    Object.keys(req.body).forEach((key) => {
-      if (allowedFields.includes(key)) {
-        updates[key] = req.body[key];
-      }
-    });
-
-    const user = await User.findByIdAndUpdate(req.user.id, updates, {
-      new: true,
-      runValidators: true,
-    });
-
-    res.status(200).json({
-      success: true,
-      data: user,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-// @desc    Actualizar contraseña
-// @route   PUT /api/auth/updatepassword
-// @access  Private
-exports.updatePassword = async (req, res, next) => {
-  try {
-    const { currentPassword, newPassword } = req.body;
-
-    if (!currentPassword || !newPassword) {
-      return res.status(400).json({
-        success: false,
-        message: "Por favor proporciona contraseña actual y nueva",
-      });
-    }
-
-    // Obtener usuario con password
-    const user = await User.findById(req.user.id).select("+password");
-
-    // Verificar contraseña actual
-    if (!(await user.comparePassword(currentPassword))) {
-      return res.status(401).json({
-        success: false,
-        message: "Contraseña actual incorrecta",
-      });
-    }
-
-    // Actualizar contraseña
-    user.password = newPassword;
-    await user.save();
-
-    createSendToken(user, 200, res);
-  } catch (error) {
-    next(error);
-  }
-};
-
 // @desc    Logout (invalidar token - cliente debe eliminar token)
 // @route   GET /api/auth/logout
 // @access  Private
 exports.logout = async (req, res, next) => {
   try {
     // El cliente debe eliminar el token del lado del frontend
-    // Aquí solo respondemos exitosamente
+    // Aquí solo respondemos exitosamente y registramos el log
+    await auditService.logAction({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      userRole: req.user.isAdmin ? "admin" : "user",
+      action: "LOGOUT",
+      entity: "User",
+      entityId: req.user.id,
+      req,
+    });
     res.status(200).json({
       success: true,
       message: "Sesión cerrada exitosamente",

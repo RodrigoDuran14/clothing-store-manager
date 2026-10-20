@@ -36,7 +36,7 @@ router.route('/')
 router.route('/:id')
   .get(isAdmin, partnerController.getPartnerById)
   .put(isAdmin, partnerController.updatePartner)
-  .delete(isAdmin, partnerController.deletePartner);
+  .patch(isAdmin, partnerController.togglePartnerStatus);
 
 // Resumen de ingresos por socio - solo admin
 router.get('/:id/income-summary', isAdmin, partnerController.getPartnerIncomeSummary);

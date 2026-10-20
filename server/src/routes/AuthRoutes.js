@@ -6,17 +6,28 @@ const { protect } = require('../middleware/Auth');
 
 // Validaciones para registro
 const registerValidation = [
-  body('nombre')
+  body('name')
     .notEmpty().withMessage('El nombre es obligatorio')
-    .isLength({ max: 100 }).withMessage('El nombre no puede exceder 100 caracteres'),
+    .isLength({ max: 100 }).withMessage('El nombre no puede exceder 100 caracteres')
+    .trim(),
   body('email')
     .isEmail().withMessage('Email inválido')
-    .normalizeEmail(),
+    .normalizeEmail()
+    .toLowerCase(),
   body('password')
     .isLength({ min: 6 }).withMessage('La contraseña debe tener al menos 6 caracteres'),
-  body('telefono')
+  body('phone')
     .optional()
-    .isLength({ max: 20 }).withMessage('Teléfono inválido')
+    .isLength({ max: 20 }).withMessage('El teléfono no puede exceder 20 caracteres')
+    .trim(),
+  body('isAdmin')
+    .optional()
+    .isBoolean().withMessage('isAdmin debe ser true o false')
+    .toBoolean(),
+  body('image')
+    .optional()
+    .isURL().withMessage('La imagen debe ser una URL válida')
+    .trim()
 ];
 
 // Validaciones para login
@@ -34,8 +45,6 @@ router.post('/login', loginValidation, authController.login);
 
 // Rutas protegidas
 router.get('/me', protect, authController.getMe);
-router.put('/updateme', protect, authController.updateMe);
-router.put('/updatepassword', protect, authController.updatePassword);
 router.get('/logout', protect, authController.logout);
 
 module.exports = router;

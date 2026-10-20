@@ -76,7 +76,7 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
 userSchema.methods.changedPasswordAfter = function(JWTTimestamp) {
   if (this.passwordChangedAt) {
     const changedTimestamp = parseInt(this.passwordChangedAt.getTime() / 1000, 10);
-    return JWTTimestamp < changedTimestamp;
+    return JWTTimestamp < changedTimestamp -1;
   }
   return false;
 };
@@ -84,4 +84,4 @@ userSchema.methods.changedPasswordAfter = function(JWTTimestamp) {
 userSchema.index({ email: 1 });
 userSchema.index({ isActive: 1 });
 
-module.exports = mongoose.model('User', userSchema);
+module.exports = mongoose.models.User || mongoose.model('User', userSchema);

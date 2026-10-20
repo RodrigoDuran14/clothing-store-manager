@@ -15,6 +15,10 @@ const {
   validateToggleStatus
 } = require('../validators/categoryValidator');
 
+router.get('/', validateGetCategories, categoryController.getCategories); // público
+router.get('/:id', validateGetCategoryById, categoryController.getCategoryById); // público
+router.get('/:id/subcategories', validateGetSubcategories, categoryController.getSubcategories); // público
+
 // ============================================
 // TODAS LAS RUTAS REQUIEREN AUTENTICACIÓN
 // ============================================
@@ -37,7 +41,6 @@ router.put('/reorder', isAdmin, validateReorderCategories, categoryController.re
 // Obtener todas las categorías (GET) - acceso general autenticado
 // Crear nueva categoría (POST) - solo admin
 router.route('/')
-  .get(validateGetCategories, categoryController.getCategories)
   .post(isAdmin, validateCreateCategory, categoryController.createCategory);
 
 // Obtener, actualizar o eliminar una categoría específica
@@ -45,7 +48,6 @@ router.route('/')
 // PUT - solo admin
 // DELETE - solo admin (soft delete)
 router.route('/:id')
-  .get(validateGetCategoryById, categoryController.getCategoryById)
   .put(isAdmin, validateUpdateCategory, categoryController.updateCategory)
   .delete(isAdmin, validateDeleteCategory, categoryController.deleteCategory);
 
@@ -53,8 +55,6 @@ router.route('/:id')
 // OPERACIONES ESPECIALES POR ID
 // ============================================
 
-// Obtener subcategorías de una categoría
-router.get('/:id/subcategories', validateGetSubcategories, categoryController.getSubcategories);
 
 // Obtener breadcrumb (ruta de navegación) de una categoría
 router.get('/:id/breadcrumb', validateGetBreadcrumb, categoryController.getCategoryBreadcrumb);

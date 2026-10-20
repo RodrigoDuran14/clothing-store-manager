@@ -4,15 +4,10 @@ const userController = require('../controllers/userController');
 const { protect } = require('../middleware/Auth');
 const { isAdmin } = require('../middleware/role');
 const {
-  validateCreateUser,
-  validateUpdateUser,
   validateUpdateMyProfile,
   validateChangePassword,
-  validateGetUser,
-  validateDeleteUser,
+  validateIdUser,
   validateListUsers,
-  validateReactivateUser,
-  validateUpdateLastLogin
 } = require('../validators/userValidator');
 
 // ============================================
@@ -23,9 +18,6 @@ router.use(protect);
 // ============================================
 // PERFIL DEL USUARIO AUTENTICADO
 // ============================================
-
-// Obtener mi perfil - acceso autenticado
-router.get('/profile', userController.getMyProfile);
 
 // Actualizar mi perfil - acceso autenticado
 router.put('/profile', validateUpdateMyProfile, userController.updateMyProfile);
@@ -46,25 +38,23 @@ router.get('/stats', isAdmin, userController.getUserStats);
 // Crear nuevo usuario (POST) - solo admin
 router.route('/')
   .get(isAdmin, validateListUsers, userController.getUsers)
-  .post(isAdmin, validateCreateUser, userController.createUser);
 
 // Obtener, actualizar o eliminar un usuario específico (solo admin)
 router.route('/:id')
-  .get(isAdmin, validateGetUser, userController.getUserById)
-  .put(isAdmin, validateUpdateUser, userController.updateUser)
-  .delete(isAdmin, validateDeleteUser, userController.deleteUser);
-
-// ============================================
-// OPERACIONES ESPECIALES (solo admin)
-// ============================================
+  .get(isAdmin, validateIdUser, userController.getUserById)
+  .patch(isAdmin, validateIdUser, userController.deleteUser);
+  
+  // ============================================
+  // OPERACIONES ESPECIALES (solo admin)
+  // ============================================
+  
+//toggle para cambiar o quitar admin
+router.patch('/:id/toggle', isAdmin, validateIdUser, userController.toggleAdmin)
 
 // Reactivar usuario desactivado
-router.put('/:id/reactivate', isAdmin, validateReactivateUser, userController.reactivateUser);
+router.put('/:id/reactivate', isAdmin, validateIdUser, userController.reactivateUser);
 
 // Eliminar usuario permanentemente (casos extremos)
-router.delete('/:id/permanent', isAdmin, validateGetUser, userController.permanentDeleteUser);
-
-// Actualizar último login (útil para seguimiento)
-router.patch('/:id/last-login', isAdmin, validateUpdateLastLogin, userController.updateLastLogin);
+router.delete('/:id/permanent', isAdmin, validateIdUser, userController.permanentDeleteUser);
 
 module.exports = router;

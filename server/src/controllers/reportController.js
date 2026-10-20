@@ -5,10 +5,10 @@ const Category = require('../models/Category');
 const Seller = require('../models/Seller');
 const excelService = require('../services/excelService');
 const chartService = require('../services/chartService');
-const financialReportsService = require('../services/financialReportsService');
-const inventoryReportsService = require('../services/inventoryReportsService');
-const salesReportsService = require('../services/salesReportsService');
-const returnsReportsService = require('../services/returnsReportsService');
+const financialReportsService = require('../services/financialReportService');
+const inventoryReportsService = require('../services/inventoryReportService');
+const salesReportsService = require('../services/salesReportService');
+const returnsReportsService = require('../services/returnReportService');
 
 // @desc    Reporte de ventas por período
 // @route   GET /api/reports/sales

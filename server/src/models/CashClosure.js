@@ -51,12 +51,30 @@ const cashClosureSchema = new mongoose.Schema({
   movementSummary: {
     totalMovements: { type: Number, default: 0 },
     byType: {
-      sale: { count: 0, amount: 0 },
-      expense: { count: 0, amount: 0 },
-      withdrawal: { count: 0, amount: 0 },
-      deposit: { count: 0, amount: 0 },
-      transfer: { count: 0, amount: 0 },
-      adjustment: { count: 0, amount: 0 }
+      sale: { 
+        count: { type: Number, default: 0 }, 
+        amount: { type: Number, default: 0 } 
+      },
+      expense: { 
+        count: { type: Number, default: 0 }, 
+        amount: { type: Number, default: 0 } 
+      },
+      withdrawal: { 
+        count: { type: Number, default: 0 }, 
+        amount: { type: Number, default: 0 } 
+      },
+      deposit: { 
+        count: { type: Number, default: 0 }, 
+        amount: { type: Number, default: 0 } 
+      },
+      transfer: { 
+        count: { type: Number, default: 0 }, 
+        amount: { type: Number, default: 0 } 
+      },
+      adjustment: { 
+        count: { type: Number, default: 0 }, 
+        amount: { type: Number, default: 0 } 
+      }
     }
   },
   

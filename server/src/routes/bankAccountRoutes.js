@@ -9,7 +9,7 @@ const {
   validateTransfer,
   validateReconcile,
   validateGetReport
-} = require('../validators/bankAccountValidator');
+} = require('../validators/bankAccontValidator');
 
 // ============================================
 // TODAS LAS RUTAS REQUIEREN AUTENTICACIÓN

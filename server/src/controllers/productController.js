@@ -1,8 +1,9 @@
-const Product = require('../models/Product');
-const Category = require('../models/Category');
-const Supplier = require('../models/Supplier');
-const { generateUniqueBarcode } = require('../services/barcodeService');
-const { filterObj, paginate, formatPagination } = require('../utils/helpers');
+const Product = require("../models/Product");
+const Category = require("../models/Category");
+const Supplier = require("../models/Supplier");
+const { generateUniqueBarcode } = require("../services/barcodeService");
+const { filterObj, paginate, formatPagination } = require("../utils/helpers");
+const auditService = require("../services/auditService");
 
 // @desc    Obtener todos los productos
 // @route   GET /api/products
@@ -21,70 +22,75 @@ exports.getProducts = async (req, res, next) => {
       minPrice,
       maxPrice,
       minStock,
-      isVisibleOnWeb
+      isVisibleOnWeb,
     } = req.query;
-    
+
     // Construir filtro de búsqueda
     const filter = {};
-    
+
     if (categoryId) filter.categoryId = categoryId;
     if (supplierId) filter.supplierId = supplierId;
-    if (isActive !== undefined) filter.isActive = isActive === 'true';
-    if (isFeatured !== undefined) filter.isFeatured = isFeatured === 'true';
-    if (isVisibleOnWeb !== undefined) filter.isVisibleOnWeb = isVisibleOnWeb === 'true';
-    
+    if (isActive !== undefined) filter.isActive = isActive === "true";
+    if (isFeatured !== undefined) filter.isFeatured = isFeatured === "true";
+    if (isVisibleOnWeb !== undefined)
+      filter.isVisibleOnWeb = isVisibleOnWeb === "true";
+
     // Filtro de precio
     if (minPrice || maxPrice) {
       filter.price = {};
       if (minPrice) filter.price.$gte = parseFloat(minPrice);
       if (maxPrice) filter.price.$lte = parseFloat(maxPrice);
     }
-    
+
     // Búsqueda por texto (usando índice text)
     if (search) {
       filter.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-        { tags: { $in: [new RegExp(search, 'i')] } }
+        { name: { $regex: search, $options: "i" } },
+        { description: { $regex: search, $options: "i" } },
+        { tags: { $in: [new RegExp(search, "i")] } },
       ];
     }
-    
-    const { skip, limit: limitValue, page: currentPage } = paginate(page, limit);
-    
+
+    const {
+      skip,
+      limit: limitValue,
+      page: currentPage,
+    } = paginate(page, limit);
+
     let products = await Product.find(filter)
-      .populate('categoryId', 'name slug')
-      .populate('supplierId', 'name contact email')
+      .populate("categoryId", "name slug")
+      .populate("supplierId", "name contact email")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limitValue);
-    
+
     // Filtrar por stock bajo (si se solicita)
-    if (lowStock === 'true') {
-      products = products.filter(product => {
-        return product.variants.some(v => v.stock <= v.minStock);
+    if (lowStock === "true") {
+      products = products.filter((product) => {
+        return product.variants.some((v) => v.stock <= v.minStock);
       });
     }
-    
+
     // Filtrar por stock mínimo específico
     if (minStock !== undefined) {
-      products = products.filter(product => {
-        return product.variants.some(v => v.stock <= parseInt(minStock));
+      products = products.filter((product) => {
+        return product.variants.some((v) => v.stock <= parseInt(minStock));
       });
     }
-    
+
     // Agregar stock total a cada producto
-    const productsWithStock = products.map(product => ({
+    const productsWithStock = products.map((product) => ({
       ...product.toObject(),
-      totalStock: product.totalStock
+      totalStock: product.totalStock,
     }));
-    
+
     const total = await Product.countDocuments(filter);
     const pagination = formatPagination(total, currentPage, limitValue);
-    
+
     res.status(200).json({
       success: true,
       data: productsWithStock,
-      pagination
+      pagination,
     });
   } catch (error) {
     next(error);
@@ -97,26 +103,26 @@ exports.getProducts = async (req, res, next) => {
 exports.getProductById = async (req, res, next) => {
   try {
     const product = await Product.findById(req.params.id)
-      .populate('categoryId', 'name description slug')
-      .populate('supplierId', 'name contact phone email');
-    
+      .populate("categoryId", "name description slug")
+      .populate("supplierId", "name contact phone email");
+
     if (!product) {
       return res.status(404).json({
         success: false,
-        message: 'Producto no encontrado'
+        message: "Producto no encontrado",
       });
     }
-    
+
     // Agregar información adicional
     const productData = {
       ...product.toObject(),
       totalStock: product.totalStock,
-      profitMargin: product.profitMargin
+      profitMargin: product.profitMargin,
     };
-    
+
     res.status(200).json({
       success: true,
-      data: productData
+      data: productData,
     });
   } catch (error) {
     next(error);
@@ -129,24 +135,24 @@ exports.getProductById = async (req, res, next) => {
 exports.getProductByBarcode = async (req, res, next) => {
   try {
     const { barcode } = req.params;
-    
+
     const product = await Product.findOne({ barcode: barcode })
-      .populate('categoryId', 'name')
-      .populate('supplierId', 'name');
-    
+      .populate("categoryId", "name")
+      .populate("supplierId", "name");
+
     if (!product) {
       return res.status(404).json({
         success: false,
-        message: 'Producto no encontrado para este código de barras'
+        message: "Producto no encontrado para este código de barras",
       });
     }
-    
+
     res.status(200).json({
       success: true,
       data: {
         ...product.toObject(),
-        totalStock: product.totalStock
-      }
+        totalStock: product.totalStock,
+      },
     });
   } catch (error) {
     next(error);
@@ -172,27 +178,27 @@ exports.createProduct = async (req, res, next) => {
       isVisibleOnWeb,
       weightKg,
       tags,
-      barcode
+      barcode,
     } = req.body;
-    
+
     // Verificar que la categoría exista
     const category = await Category.findById(categoryId);
     if (!category) {
       return res.status(404).json({
         success: false,
-        message: 'La categoría especificada no existe'
+        message: "La categoría especificada no existe",
       });
     }
-    
+
     // Verificar que el proveedor exista
     const supplier = await Supplier.findById(supplierId);
     if (!supplier) {
       return res.status(404).json({
         success: false,
-        message: 'El proveedor especificado no existe'
+        message: "El proveedor especificado no existe",
       });
     }
-    
+
     // Generar código de barras único si no se proporcionó
     let finalBarcode = barcode;
     if (!finalBarcode) {
@@ -203,11 +209,11 @@ exports.createProduct = async (req, res, next) => {
       if (existingProduct) {
         return res.status(400).json({
           success: false,
-          message: 'Ya existe un producto con este código de barras'
+          message: "Ya existe un producto con este código de barras",
         });
       }
     }
-    
+
     const product = await Product.create({
       name,
       description,
@@ -222,16 +228,31 @@ exports.createProduct = async (req, res, next) => {
       isFeatured: isFeatured || false,
       isVisibleOnWeb: isVisibleOnWeb !== false,
       weightKg: weightKg || 0,
-      tags: tags || []
+      tags: tags || [],
     });
-    
+
+    await auditService.logAction({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      userRole: req.user.isAdmin ? "admin" : "user",
+      action: "CREATE",
+      entity: "Product",
+      entityId: product._id,
+      newData: {
+        name: product.name,
+        price: product.price,
+        variantsCount: product.variants.length,
+      },
+      req,
+    });
+
     res.status(201).json({
       success: true,
       data: {
         ...product.toObject(),
-        totalStock: product.totalStock
+        totalStock: product.totalStock,
       },
-      message: 'Producto creado exitosamente'
+      message: "Producto creado exitosamente",
     });
   } catch (error) {
     next(error);
@@ -244,74 +265,102 @@ exports.createProduct = async (req, res, next) => {
 exports.updateProduct = async (req, res, next) => {
   try {
     const allowedFields = [
-      'name', 'description', 'categoryId', 'supplierId',
-      'variants', 'price', 'webPrice', 'cost', 'images',
-      'isActive', 'isFeatured', 'isVisibleOnWeb', 'weightKg', 'tags', 'barcode'
+      "name",
+      "description",
+      "categoryId",
+      "supplierId",
+      "variants",
+      "price",
+      "webPrice",
+      "cost",
+      "images",
+      "isActive",
+      "isFeatured",
+      "isVisibleOnWeb",
+      "weightKg",
+      "tags",
+      "barcode",
     ];
-    
+
     const filteredBody = filterObj(req.body, ...allowedFields);
-    
+
     // Si está actualizando el código de barras, verificar que sea único
     if (filteredBody.barcode) {
       const existingProduct = await Product.findOne({
         barcode: filteredBody.barcode,
-        _id: { $ne: req.params.id }
+        _id: { $ne: req.params.id },
       });
-      
+
       if (existingProduct) {
         return res.status(400).json({
           success: false,
-          message: 'Ya existe otro producto con este código de barras'
+          message: "Ya existe otro producto con este código de barras",
         });
       }
     }
-    
+
     // Si actualiza categoría, verificar que exista
     if (filteredBody.categoryId) {
       const category = await Category.findById(filteredBody.categoryId);
       if (!category) {
         return res.status(404).json({
           success: false,
-          message: 'La categoría especificada no existe'
+          message: "La categoría especificada no existe",
         });
       }
     }
-    
+
     // Si actualiza proveedor, verificar que exista
     if (filteredBody.supplierId) {
       const supplier = await Supplier.findById(filteredBody.supplierId);
       if (!supplier) {
         return res.status(404).json({
           success: false,
-          message: 'El proveedor especificado no existe'
+          message: "El proveedor especificado no existe",
         });
       }
     }
-    
+
+    const oldProduct = await Product.findById(req.params.id).lean();
+
     const product = await Product.findByIdAndUpdate(
       req.params.id,
       filteredBody,
       {
         new: true,
-        runValidators: true
-      }
-    ).populate('categoryId supplierId');
-    
+        runValidators: true,
+      },
+    ).populate("categoryId supplierId");
+
     if (!product) {
       return res.status(404).json({
         success: false,
-        message: 'Producto no encontrado'
+        message: "Producto no encontrado",
       });
     }
-    
+
+    const changes = auditService.computeChanges(oldProduct, product.toObject());
+    await auditService.logAction({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      userRole: req.user.isAdmin ? "admin" : "user",
+      action: "UPDATE",
+      entity: "Product",
+      entityId: product._id,
+      oldData: oldProduct,
+      newData: product.toObject(),
+      changes,
+      req,
+    });
+
     res.status(200).json({
       success: true,
       data: {
         ...product.toObject(),
         totalStock: product.totalStock,
-        profitMargin: product.profitMargin
+        profitMargin: product.profitMargin,
       },
-      message: 'Producto actualizado exitosamente'
+      message: "Producto actualizado exitosamente",
     });
   } catch (error) {
     next(error);
@@ -324,21 +373,33 @@ exports.updateProduct = async (req, res, next) => {
 exports.deleteProduct = async (req, res, next) => {
   try {
     const product = await Product.findById(req.params.id);
-    
+
     if (!product) {
       return res.status(404).json({
         success: false,
-        message: 'Producto no encontrado'
+        message: "Producto no encontrado",
       });
     }
-    
+
     // Soft delete - solo desactivar
     product.isActive = false;
     await product.save();
-    
+
+    await auditService.logAction({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      userRole: "admin",
+      action: "DELETE",
+      entity: "Product",
+      entityId: product._id,
+      oldData: { isActive: true },
+      newData: { isActive: false },
+      req,
+    });
+
     res.status(200).json({
       success: true,
-      message: 'Producto desactivado exitosamente'
+      message: "Producto desactivado exitosamente",
     });
   } catch (error) {
     next(error);
@@ -350,40 +411,66 @@ exports.deleteProduct = async (req, res, next) => {
 // @access  Private/Admin
 exports.updateStock = async (req, res, next) => {
   try {
-    const { size, color, quantity, type = 'adjustment' } = req.body;
-    
+    const { size, color, quantity, type = "adjustment" } = req.body;
+
     const product = await Product.findById(req.params.id);
-    
+
+    const oldStock = product.variants.find(
+      (v) => v.size === req.body.size && v.color === req.body.color,
+    )?.stock;
+
     if (!product) {
       return res.status(404).json({
         success: false,
-        message: 'Producto no encontrado'
+        message: "Producto no encontrado",
       });
     }
-    
+
     // Verificar stock disponible para ventas
-    if (type === 'sale') {
+    if (type === "sale") {
       const stockCheck = product.checkStock(size, color, quantity);
       if (!stockCheck.available) {
         return res.status(400).json({
           success: false,
           message: stockCheck.message,
-          availableStock: stockCheck.availableStock
+          availableStock: stockCheck.availableStock,
         });
       }
     }
-    
-    const updatedVariant = await product.updateStock(size, color, quantity, type);
-    
+
+    const updatedVariant = await product.updateStock(
+      size,
+      color,
+      quantity,
+      type,
+    );
+
+    await auditService.logAction({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      userRole: req.user.isAdmin ? "admin" : "user",
+      action: "UPDATE_STOCK",
+      entity: "Product",
+      entityId: product._id,
+      changes: [
+        {
+          field: `variants.${req.body.size}_${req.body.color}.stock`,
+          oldValue: oldStock,
+          newValue: updatedVariant.stock,
+        },
+      ],
+      req,
+    });
+
     res.status(200).json({
       success: true,
       data: {
         productId: product._id,
         name: product.name,
         variant: updatedVariant,
-        totalStock: product.totalStock
+        totalStock: product.totalStock,
       },
-      message: 'Stock actualizado exitosamente'
+      message: "Stock actualizado exitosamente",
     });
   } catch (error) {
     next(error);
@@ -396,11 +483,11 @@ exports.updateStock = async (req, res, next) => {
 exports.getLowStockProducts = async (req, res, next) => {
   try {
     const lowStock = await Product.getLowStockProducts();
-    
+
     res.status(200).json({
       success: true,
       data: lowStock,
-      total: lowStock.length
+      total: lowStock.length,
     });
   } catch (error) {
     next(error);
@@ -417,38 +504,46 @@ exports.getProductStats = async (req, res, next) => {
     const inactiveProducts = totalProducts - activeProducts;
     const featuredProducts = await Product.countDocuments({ isFeatured: true });
     const visibleOnWeb = await Product.countDocuments({ isVisibleOnWeb: true });
-    
+
     // Obtener todos los productos activos para cálculos
     const products = await Product.find({ isActive: true });
-    
+
     let totalStock = 0;
     let totalInventoryValue = 0;
     let totalSalesValue = 0;
-    
-    products.forEach(product => {
-      product.variants.forEach(variant => {
+
+    products.forEach((product) => {
+      product.variants.forEach((variant) => {
         totalStock += variant.stock;
         totalInventoryValue += variant.stock * product.cost;
         totalSalesValue += variant.stock * product.price;
       });
     });
-    
+
     const lowStockCount = await Product.getLowStockProducts();
-    
+
     // Productos por categoría
     const productsByCategory = await Product.aggregate([
       { $match: { isActive: true } },
-      { $group: { _id: '$categoryId', count: { $sum: 1 } } },
-      { $lookup: { from: 'categories', localField: '_id', foreignField: '_id', as: 'category' } },
-      { $unwind: { path: '$category', preserveNullAndEmptyArrays: true } },
-      { $project: { categoryName: '$category.name', count: 1 } }
+      { $group: { _id: "$categoryId", count: { $sum: 1 } } },
+      {
+        $lookup: {
+          from: "categories",
+          localField: "_id",
+          foreignField: "_id",
+          as: "category",
+        },
+      },
+      { $unwind: { path: "$category", preserveNullAndEmptyArrays: true } },
+      { $project: { categoryName: "$category.name", count: 1 } },
     ]);
-    
+
     // Margen de ganancia promedio
-    const averageProfitMargin = products.reduce((acc, product) => {
-      return acc + product.profitMargin;
-    }, 0) / (products.length || 1);
-    
+    const averageProfitMargin =
+      products.reduce((acc, product) => {
+        return acc + product.profitMargin;
+      }, 0) / (products.length || 1);
+
     res.status(200).json({
       success: true,
       data: {
@@ -463,8 +558,8 @@ exports.getProductStats = async (req, res, next) => {
         potentialProfit: totalSalesValue - totalInventoryValue,
         lowStockProducts: lowStockCount.length,
         averageProfitMargin: averageProfitMargin.toFixed(2),
-        productsByCategory
-      }
+        productsByCategory,
+      },
     });
   } catch (error) {
     next(error);
@@ -477,28 +572,28 @@ exports.getProductStats = async (req, res, next) => {
 exports.checkStock = async (req, res, next) => {
   try {
     const { size, color, quantity = 1 } = req.query;
-    
+
     if (!size || !color) {
       return res.status(400).json({
         success: false,
-        message: 'Se requiere tamaño y color para verificar stock'
+        message: "Se requiere tamaño y color para verificar stock",
       });
     }
-    
+
     const product = await Product.findById(req.params.id);
-    
+
     if (!product) {
       return res.status(404).json({
         success: false,
-        message: 'Producto no encontrado'
+        message: "Producto no encontrado",
       });
     }
-    
+
     const stockCheck = product.checkStock(size, color, parseInt(quantity));
-    
+
     res.status(200).json({
       success: true,
-      data: stockCheck
+      data: stockCheck,
     });
   } catch (error) {
     next(error);
@@ -510,24 +605,39 @@ exports.checkStock = async (req, res, next) => {
 // @access  Private/Admin
 exports.toggleProductStatus = async (req, res, next) => {
   try {
+    const oldProduct = await Product.findById(req.params.id).lean();
     const product = await Product.findById(req.params.id);
-    
+
     if (!product) {
       return res.status(404).json({
         success: false,
-        message: 'Producto no encontrado'
+        message: "Producto no encontrado",
       });
     }
-    
+
     product.isActive = !product.isActive;
     await product.save();
-    
+
+    const changes = auditService.computeChanges(oldProduct, product.toObject());
+    await auditService.logAction({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      userRole: req.user.isAdmin ? "admin" : "user",
+      action: "TOGGLE_STATUS",
+      entity: "Product",
+      entityId: product._id,
+      oldData: oldProduct,
+      newData: product.toObject(),
+      changes,
+      req,
+    });
+
     res.status(200).json({
       success: true,
       data: {
-        isActive: product.isActive
+        isActive: product.isActive,
       },
-      message: `Producto ${product.isActive ? 'activado' : 'desactivado'} exitosamente`
+      message: `Producto ${product.isActive ? "activado" : "desactivado"} exitosamente`,
     });
   } catch (error) {
     next(error);
@@ -540,42 +650,53 @@ exports.toggleProductStatus = async (req, res, next) => {
 exports.addProductImage = async (req, res, next) => {
   try {
     const { url, publicId, isMain } = req.body;
-    
+
     if (!url) {
       return res.status(400).json({
         success: false,
-        message: 'La URL de la imagen es requerida'
+        message: "La URL de la imagen es requerida",
       });
     }
-    
+
     const product = await Product.findById(req.params.id);
-    
+
     if (!product) {
       return res.status(404).json({
         success: false,
-        message: 'Producto no encontrado'
+        message: "Producto no encontrado",
       });
     }
-    
+
     // Si esta imagen es principal, quitar el flag de otras imágenes
     if (isMain) {
-      product.images.forEach(img => {
+      product.images.forEach((img) => {
         img.isMain = false;
       });
     }
-    
+
     product.images.push({
       url,
-      publicId: publicId || '',
-      isMain: isMain || false
+      publicId: publicId || "",
+      isMain: isMain || false,
     });
-    
+
+    await auditService.logAction({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      userRole: req.user.isAdmin ? "admin" : "user",
+      action: "ADD_IMAGE",
+      entity: "Product",
+      entityId: product._id,
+      newData: { image: req.body.url },
+      req,
+    });
+
     await product.save();
-    
+
     res.status(201).json({
       success: true,
       data: product.images,
-      message: 'Imagen agregada exitosamente'
+      message: "Imagen agregada exitosamente",
     });
   } catch (error) {
     next(error);
@@ -588,24 +709,37 @@ exports.addProductImage = async (req, res, next) => {
 exports.deleteProductImage = async (req, res, next) => {
   try {
     const { id, imageId } = req.params;
-    
+
     const product = await Product.findById(id);
-    
+
     if (!product) {
       return res.status(404).json({
         success: false,
-        message: 'Producto no encontrado'
+        message: "Producto no encontrado",
       });
     }
-    
+
     // Eliminar la imagen
-    product.images = product.images.filter(img => img._id.toString() !== imageId);
+    product.images = product.images.filter(
+      (img) => img._id.toString() !== imageId,
+    );
     await product.save();
-    
+
+    await auditService.logAction({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      userRole: "admin",
+      action: "DELETE_IMAGE",
+      entity: "Product",
+      entityId: product._id,
+      newData: { images: product.images },
+      req,
+    });
+
     res.status(200).json({
       success: true,
       data: product.images,
-      message: 'Imagen eliminada exitosamente'
+      message: "Imagen eliminada exitosamente",
     });
   } catch (error) {
     next(error);
@@ -618,37 +752,37 @@ exports.deleteProductImage = async (req, res, next) => {
 exports.setMainImage = async (req, res, next) => {
   try {
     const { id, imageId } = req.params;
-    
+
     const product = await Product.findById(id);
-    
+
     if (!product) {
       return res.status(404).json({
         success: false,
-        message: 'Producto no encontrado'
+        message: "Producto no encontrado",
       });
     }
-    
+
     // Quitar flag de todas las imágenes
-    product.images.forEach(img => {
+    product.images.forEach((img) => {
       img.isMain = false;
     });
-    
+
     // Establecer la imagen seleccionada como principal
     const image = product.images.id(imageId);
     if (!image) {
       return res.status(404).json({
         success: false,
-        message: 'Imagen no encontrada'
+        message: "Imagen no encontrada",
       });
     }
-    
+
     image.isMain = true;
     await product.save();
-    
+
     res.status(200).json({
       success: true,
       data: product.images,
-      message: 'Imagen principal actualizada exitosamente'
+      message: "Imagen principal actualizada exitosamente",
     });
   } catch (error) {
     next(error);

@@ -13,6 +13,10 @@ const {
   validateDeleteImage
 } = require('../validators/productValidator');
 
+router.get('/', productController.getProducts); // público
+router.get('/barcode/:barcode', productController.getProductByBarcode); // público
+router.get('/:id', productController.getProductById); // público
+
 // ============================================
 // TODAS LAS RUTAS REQUIEREN AUTENTICACIÓN
 // ============================================

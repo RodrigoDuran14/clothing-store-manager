@@ -42,7 +42,7 @@ exports.protect = async (req, res, next) => {
     }
 
     // Verificar si el usuario está activo
-    if (!user.activo) {
+    if (!user.isActive) {
       return res.status(401).json({
         success: false,
         message: "Tu cuenta está desactivada",
@@ -68,7 +68,7 @@ exports.protect = async (req, res, next) => {
 
 // Middleware para restringir a admins
 exports.restrictToAdmin = (req, res, next) => {
-  if (!req.user.admin) {
+  if (!req.user.isAdmin) {
     return res.status(403).json({
       success: false,
       message: "Acceso denegado. Se requieren permisos de administrador",
@@ -78,14 +78,14 @@ exports.restrictToAdmin = (req, res, next) => {
 };
 
 // Middleware opcional para verificar roles (para futuro)
-exports.restrictTo = (...roles) => {
-  return (req, res, next) => {
-    if (!roles.includes(req.user.role || "user")) {
-      return res.status(403).json({
-        success: false,
-        message: "No tienes permiso para realizar esta acción",
-      });
-    }
-    next();
-  };
-};
+//exports.restrictTo = (...roles) => {
+//  return (req, res, next) => {
+//    if (!roles.includes(req.user.role || "user")) {
+//      return res.status(403).json({
+//        success: false,
+//        message: "No tienes permiso para realizar esta acción",
+//      });
+//    }
+//    next();
+//  };
+//};

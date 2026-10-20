@@ -1,6 +1,7 @@
-const Supplier = require('../models/Supplier');
-const Product = require('../models/Product');
-const { filterObj, paginate, formatPagination } = require('../utils/helpers');
+const Supplier = require("../models/Supplier");
+const Product = require("../models/Product");
+const { filterObj, paginate, formatPagination } = require("../utils/helpers");
+const auditService = require("../services/auditService");
 
 // @desc    Obtener todos los proveedores
 // @route   GET /api/suppliers
@@ -13,78 +14,84 @@ exports.getSuppliers = async (req, res, next) => {
       isActive,
       search,
       rating,
-      orderBy = 'name',
+      orderBy = "name",
       taxCondition,
-      paymentTerms
+      paymentTerms,
     } = req.query;
-    
+
     // Construir filtro de búsqueda
     const filter = {};
-    if (isActive !== undefined) filter.isActive = isActive === 'true';
+    if (isActive !== undefined) filter.isActive = isActive === "true";
     if (rating) filter.rating = parseInt(rating);
     if (taxCondition) filter.taxCondition = taxCondition;
     if (paymentTerms) filter.paymentTerms = paymentTerms;
-    
+
     // Búsqueda por nombre, email, contacto o teléfono
     if (search) {
       filter.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } },
-        { contactName: { $regex: search, $options: 'i' } },
-        { phone: { $regex: search, $options: 'i' } }
+        { name: { $regex: search, $options: "i" } },
+        { email: { $regex: search, $options: "i" } },
+        { contactName: { $regex: search, $options: "i" } },
+        { phone: { $regex: search, $options: "i" } },
       ];
     }
-    
+
     // Configurar ordenamiento
     let sort = {};
-    switch(orderBy) {
-      case 'name':
+    switch (orderBy) {
+      case "name":
         sort = { name: 1 };
         break;
-      case 'rating':
+      case "rating":
         sort = { rating: -1 };
         break;
-      case 'totalPurchases':
+      case "totalPurchases":
         sort = { totalPurchases: -1 };
         break;
-      case 'lastPurchase':
+      case "lastPurchase":
         sort = { lastPurchase: -1 };
         break;
-      case 'debt':
+      case "debt":
         sort = { debt: -1 };
         break;
       default:
         sort = { name: 1 };
     }
-    
-    const { skip, limit: limitValue, page: currentPage } = paginate(page, limit);
-    
+
+    const {
+      skip,
+      limit: limitValue,
+      page: currentPage,
+    } = paginate(page, limit);
+
     const suppliers = await Supplier.find(filter)
       .sort(sort)
       .skip(skip)
       .limit(limitValue);
-    
+
     // Contar productos por proveedor
-    const suppliersWithCount = await Promise.all(suppliers.map(async (supplier) => {
-      const productsCount = await Product.countDocuments({
-        supplierId: supplier._id,
-        isActive: true
-      });
-      
-      return {
-        ...supplier.toObject(),
-        productsCount,
-        fullAddress: supplier.fullAddress
-      };
-    }));
-    
+    const suppliersWithCount = await Promise.all(
+      suppliers.map(async (supplier) => {
+        const productsCount = await Product.countDocuments({
+          supplierId: supplier._id,
+          isActive: true,
+        });
+
+        return {
+          ...supplier.toObject(),
+          productsCount,
+          fullAddress: supplier.fullAddress,
+        };
+      }),
+    );
+
     const total = await Supplier.countDocuments(filter);
     const pagination = formatPagination(total, currentPage, limitValue);
-    
+
     res.status(200).json({
       success: true,
       data: suppliersWithCount,
-      pagination
+      pagination,
     });
   } catch (error) {
     next(error);
@@ -97,28 +104,28 @@ exports.getSuppliers = async (req, res, next) => {
 exports.getSupplierById = async (req, res, next) => {
   try {
     const supplier = await Supplier.findById(req.params.id);
-    
+
     if (!supplier) {
       return res.status(404).json({
         success: false,
-        message: 'Proveedor no encontrado'
+        message: "Proveedor no encontrado",
       });
     }
-    
+
     // Obtener productos de este proveedor
     const products = await Product.find({
       supplierId: supplier._id,
-      isActive: true
-    }).select('name description price cost stock totalStock variants');
-    
+      isActive: true,
+    }).select("name description price cost stock totalStock variants");
+
     res.status(200).json({
       success: true,
       data: {
         ...supplier.toObject(),
         products,
         fullAddress: supplier.fullAddress,
-        productsCount: products.length
-      }
+        productsCount: products.length,
+      },
     });
   } catch (error) {
     next(error);
@@ -143,41 +150,43 @@ exports.createSupplier = async (req, res, next) => {
       rating,
       deliveryTime,
       paymentTerms,
-      bankInfo
+      bankInfo,
     } = req.body;
-    
+
     // Verificar si ya existe por nombre
     const existingSupplier = await Supplier.findOne({
-      name: name.toUpperCase()
+      name: name.toUpperCase(),
     });
-    
+
     if (existingSupplier) {
       return res.status(400).json({
         success: false,
-        message: 'Ya existe un proveedor con este nombre'
+        message: "Ya existe un proveedor con este nombre",
       });
     }
-    
+
     // Verificar si ya existe por email
-    const existingEmail = await Supplier.findOne({ email: email.toLowerCase() });
+    const existingEmail = await Supplier.findOne({
+      email: email.toLowerCase(),
+    });
     if (existingEmail) {
       return res.status(400).json({
         success: false,
-        message: 'Ya existe un proveedor con este email'
+        message: "Ya existe un proveedor con este email",
       });
     }
-    
+
     // Verificar taxId (CUIT) si fue proporcionado
     if (taxId) {
       const existingTaxId = await Supplier.findOne({ taxId });
       if (existingTaxId) {
         return res.status(400).json({
           success: false,
-          message: 'Ya existe un proveedor con este CUIT'
+          message: "Ya existe un proveedor con este CUIT",
         });
       }
     }
-    
+
     const supplier = await Supplier.create({
       name: name.toUpperCase(),
       contactName,
@@ -186,22 +195,33 @@ exports.createSupplier = async (req, res, next) => {
       email: email.toLowerCase(),
       address: address || {},
       taxId,
-      taxCondition: taxCondition || 'responsible',
+      taxCondition: taxCondition || "responsible",
       notes,
       rating: rating || 3,
       deliveryTime: deliveryTime || 7,
-      paymentTerms: paymentTerms || 'cash',
+      paymentTerms: paymentTerms || "cash",
       bankInfo: bankInfo || {},
-      suppliedProducts: []
+      suppliedProducts: [],
     });
-    
+
+    await auditService.logAction({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      userRole: "admin",
+      action: "CREATE",
+      entity: "Supplier",
+      entityId: supplier._id,
+      newData: { name: supplier.name, email: supplier.email },
+      req,
+    });
+
     res.status(201).json({
       success: true,
       data: {
         ...supplier.toObject(),
-        fullAddress: supplier.fullAddress
+        fullAddress: supplier.fullAddress,
       },
-      message: 'Proveedor creado exitosamente'
+      message: "Proveedor creado exitosamente",
     });
   } catch (error) {
     next(error);
@@ -214,83 +234,114 @@ exports.createSupplier = async (req, res, next) => {
 exports.updateSupplier = async (req, res, next) => {
   try {
     const allowedFields = [
-      'name', 'contactName', 'phone', 'phone2', 'email',
-      'address', 'taxId', 'taxCondition', 'notes', 'isActive',
-      'rating', 'deliveryTime', 'paymentTerms', 'bankInfo', 'debt'
+      "name",
+      "contactName",
+      "phone",
+      "phone2",
+      "email",
+      "address",
+      "taxId",
+      "taxCondition",
+      "notes",
+      "isActive",
+      "rating",
+      "deliveryTime",
+      "paymentTerms",
+      "bankInfo",
+      "debt",
     ];
-    
+
     const filteredBody = filterObj(req.body, ...allowedFields);
-    
+
     // Si cambia el nombre, verificar que no exista otro
     if (filteredBody.name) {
       filteredBody.name = filteredBody.name.toUpperCase();
       const existingSupplier = await Supplier.findOne({
         name: filteredBody.name,
-        _id: { $ne: req.params.id }
+        _id: { $ne: req.params.id },
       });
-      
+
       if (existingSupplier) {
         return res.status(400).json({
           success: false,
-          message: 'Ya existe otro proveedor con este nombre'
+          message: "Ya existe otro proveedor con este nombre",
         });
       }
     }
-    
+
     // Si cambia el email, verificar que no exista otro
     if (filteredBody.email) {
       filteredBody.email = filteredBody.email.toLowerCase();
       const existingSupplier = await Supplier.findOne({
         email: filteredBody.email,
-        _id: { $ne: req.params.id }
+        _id: { $ne: req.params.id },
       });
-      
+
       if (existingSupplier) {
         return res.status(400).json({
           success: false,
-          message: 'Ya existe otro proveedor con este email'
+          message: "Ya existe otro proveedor con este email",
         });
       }
     }
-    
+
     // Si cambia el taxId, verificar que no exista otro
     if (filteredBody.taxId) {
       const existingSupplier = await Supplier.findOne({
         taxId: filteredBody.taxId,
-        _id: { $ne: req.params.id }
+        _id: { $ne: req.params.id },
       });
-      
+
       if (existingSupplier) {
         return res.status(400).json({
           success: false,
-          message: 'Ya existe otro proveedor con este CUIT'
+          message: "Ya existe otro proveedor con este CUIT",
         });
       }
     }
-    
+
+    const oldSupplier = await Supplier.findById(req.params.id).lean();
+
     const supplier = await Supplier.findByIdAndUpdate(
       req.params.id,
       filteredBody,
       {
         new: true,
-        runValidators: true
-      }
+        runValidators: true,
+      },
     );
-    
+
     if (!supplier) {
       return res.status(404).json({
         success: false,
-        message: 'Proveedor no encontrado'
+        message: "Proveedor no encontrado",
       });
     }
-    
+
+    const changes = auditService.computeChanges(
+      oldSupplier,
+      supplier.toObject(),
+    );
+    await auditService.logAction({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      userRole: req.user.isAdmin ? "admin" : "user",
+      action: "UPDATE",
+      entity: "Supplier",
+      entityId: supplier._id,
+      oldData: oldSupplier,
+      newData: supplier.toObject(),
+      changes,
+      req,
+    });
+
     res.status(200).json({
       success: true,
       data: {
         ...supplier.toObject(),
-        fullAddress: supplier.fullAddress
+        fullAddress: supplier.fullAddress,
       },
-      message: 'Proveedor actualizado exitosamente'
+      message: "Proveedor actualizado exitosamente",
     });
   } catch (error) {
     next(error);
@@ -303,34 +354,46 @@ exports.updateSupplier = async (req, res, next) => {
 exports.deleteSupplier = async (req, res, next) => {
   try {
     const supplier = await Supplier.findById(req.params.id);
-    
+
     if (!supplier) {
       return res.status(404).json({
         success: false,
-        message: 'Proveedor no encontrado'
+        message: "Proveedor no encontrado",
       });
     }
-    
+
     // Verificar si tiene productos asociados
     const hasProducts = await Product.countDocuments({
       supplierId: supplier._id,
-      isActive: true
+      isActive: true,
     });
-    
+
     if (hasProducts > 0) {
       return res.status(400).json({
         success: false,
-        message: `No se puede eliminar el proveedor porque tiene ${hasProducts} productos asociados`
+        message: `No se puede eliminar el proveedor porque tiene ${hasProducts} productos asociados`,
       });
     }
-    
+
     // Soft delete
     supplier.isActive = false;
     await supplier.save();
-    
+
+    await auditService.logAction({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      userRole: "admin",
+      action: "DELETE",
+      entity: "Supplier",
+      entityId: supplier._id,
+      oldData: { isActive: true },
+      newData: { isActive: false },
+      req,
+    });
+
     res.status(200).json({
       success: true,
-      message: 'Proveedor desactivado exitosamente'
+      message: "Proveedor desactivado exitosamente",
     });
   } catch (error) {
     next(error);
@@ -343,28 +406,42 @@ exports.deleteSupplier = async (req, res, next) => {
 exports.permanentDeleteSupplier = async (req, res, next) => {
   try {
     const supplier = await Supplier.findById(req.params.id);
-    
+
     if (!supplier) {
       return res.status(404).json({
         success: false,
-        message: 'Proveedor no encontrado'
+        message: "Proveedor no encontrado",
       });
     }
-    
+
     // Verificar si tiene productos asociados
-    const hasProducts = await Product.countDocuments({ supplierId: supplier._id });
+    const hasProducts = await Product.countDocuments({
+      supplierId: supplier._id,
+    });
     if (hasProducts > 0) {
       return res.status(400).json({
         success: false,
-        message: 'No se puede eliminar el proveedor porque tiene productos asociados'
+        message:
+          "No se puede eliminar el proveedor porque tiene productos asociados",
       });
     }
-    
+
     await supplier.deleteOne();
-    
+
+    await auditService.logAction({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      userRole: "admin",
+      action: "PERMANENT_DELETE",
+      entity: "Supplier",
+      entityId: supplier._id,
+      oldData: { supplier: supplier.toObject() },
+      req,
+    });
+
     res.status(200).json({
       success: true,
-      message: 'Proveedor eliminado permanentemente'
+      message: "Proveedor eliminado permanentemente",
     });
   } catch (error) {
     next(error);
@@ -377,39 +454,50 @@ exports.permanentDeleteSupplier = async (req, res, next) => {
 exports.addProductToSupplier = async (req, res, next) => {
   try {
     const { productId } = req.body;
-    
+
     const supplier = await Supplier.findById(req.params.id);
     if (!supplier) {
       return res.status(404).json({
         success: false,
-        message: 'Proveedor no encontrado'
+        message: "Proveedor no encontrado",
       });
     }
-    
+
     const product = await Product.findById(productId);
     if (!product) {
       return res.status(404).json({
         success: false,
-        message: 'Producto no encontrado'
+        message: "Producto no encontrado",
       });
     }
-    
+
     // Agregar producto al proveedor usando el método de instancia
     await supplier.addProduct(productId);
-    
+
     // Actualizar el supplierId en el producto
     product.supplierId = supplier._id;
     await product.save();
-    
+
+    await auditService.logAction({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      userRole: "admin",
+      action: "ADD_PRODUCT",
+      entity: "Supplier",
+      entityId: supplier._id,
+      newData: { newProduct: product.toObject() },
+      req,
+    });
+
     res.status(200).json({
       success: true,
       data: {
         supplierId: supplier._id,
         supplierName: supplier.name,
         productId: product._id,
-        productName: product.name
+        productName: product.name,
       },
-      message: 'Producto asociado al proveedor exitosamente'
+      message: "Producto asociado al proveedor exitosamente",
     });
   } catch (error) {
     next(error);
@@ -422,31 +510,41 @@ exports.addProductToSupplier = async (req, res, next) => {
 exports.removeProductFromSupplier = async (req, res, next) => {
   try {
     const { id, productId } = req.params;
-    
+
     const supplier = await Supplier.findById(id);
     if (!supplier) {
       return res.status(404).json({
         success: false,
-        message: 'Proveedor no encontrado'
+        message: "Proveedor no encontrado",
       });
     }
-    
+
     // Eliminar producto de la lista
     supplier.suppliedProducts = supplier.suppliedProducts.filter(
-      p => p.toString() !== productId
+      (p) => p.toString() !== productId,
     );
     await supplier.save();
-    
+
     // Actualizar el producto para remover el supplierId
     const product = await Product.findById(productId);
     if (product && product.supplierId && product.supplierId.toString() === id) {
       product.supplierId = null;
       await product.save();
     }
-    
+
+    await auditService.logAction({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      userRole: "admin",
+      action: "REMOVE_PRODUCT",
+      entity: "Supplier",
+      entityId: supplier._id,
+      req,
+    });
+
     res.status(200).json({
       success: true,
-      message: 'Producto desasociado del proveedor exitosamente'
+      message: "Producto desasociado del proveedor exitosamente",
     });
   } catch (error) {
     next(error);
@@ -460,11 +558,11 @@ exports.getTopSuppliers = async (req, res, next) => {
   try {
     const { limit = 10 } = req.query;
     const topSuppliers = await Supplier.getTopSuppliers(parseInt(limit));
-    
+
     res.status(200).json({
       success: true,
       data: topSuppliers,
-      limit: parseInt(limit)
+      limit: parseInt(limit),
     });
   } catch (error) {
     next(error);
@@ -477,21 +575,21 @@ exports.getTopSuppliers = async (req, res, next) => {
 exports.getSuppliersByProduct = async (req, res, next) => {
   try {
     const { productId } = req.params;
-    
+
     const product = await Product.findById(productId);
     if (!product) {
       return res.status(404).json({
         success: false,
-        message: 'Producto no encontrado'
+        message: "Producto no encontrado",
       });
     }
-    
+
     const suppliers = await Supplier.findByProduct(productId);
-    
+
     res.status(200).json({
       success: true,
       data: suppliers,
-      total: suppliers.length
+      total: suppliers.length,
     });
   } catch (error) {
     next(error);
@@ -504,38 +602,57 @@ exports.getSuppliersByProduct = async (req, res, next) => {
 exports.recordPurchase = async (req, res, next) => {
   try {
     const { amount, updateDebt = false } = req.body;
-    
+
     if (!amount || amount <= 0) {
       return res.status(400).json({
         success: false,
-        message: 'El monto debe ser mayor a 0'
+        message: "El monto debe ser mayor a 0",
       });
     }
-    
+
     const supplier = await Supplier.findById(req.params.id);
     if (!supplier) {
       return res.status(404).json({
         success: false,
-        message: 'Proveedor no encontrado'
+        message: "Proveedor no encontrado",
       });
     }
-    
+
+    const oldTotal = supplier.totalPurchases;
+
     // Registrar la compra
     await supplier.recordPurchase(amount);
-    
+
     // Actualizar deuda si se solicita
     if (updateDebt) {
-      await supplier.updateDebt(amount, 'increase');
+      await supplier.updateDebt(amount, "increase");
     }
-    
+
+    await auditService.logAction({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      userRole: "admin",
+      action: "RECORD_PURCHASE",
+      entity: "Supplier",
+      entityId: supplier._id,
+      changes: [
+        {
+          field: "totalPurchases",
+          oldValue: oldTotal,
+          newValue: supplier.totalPurchases,
+        },
+      ],
+      req,
+    });
+
     res.status(200).json({
       success: true,
       data: {
         totalPurchases: supplier.totalPurchases,
         lastPurchase: supplier.lastPurchase,
-        debt: supplier.debt
+        debt: supplier.debt,
       },
-      message: 'Compra registrada exitosamente'
+      message: "Compra registrada exitosamente",
     });
   } catch (error) {
     next(error);
@@ -547,31 +664,50 @@ exports.recordPurchase = async (req, res, next) => {
 // @access  Private/Admin
 exports.updateDebt = async (req, res, next) => {
   try {
-    const { amount, type = 'increase' } = req.body;
-    
+    const { amount, type = "increase" } = req.body;
+
     if (!amount || amount <= 0) {
       return res.status(400).json({
         success: false,
-        message: 'El monto debe ser mayor a 0'
+        message: "El monto debe ser mayor a 0",
       });
     }
-    
+
     const supplier = await Supplier.findById(req.params.id);
     if (!supplier) {
       return res.status(404).json({
         success: false,
-        message: 'Proveedor no encontrado'
+        message: "Proveedor no encontrado",
       });
     }
-    
+
+    const oldTotal = supplier.totalPurchases;
+
     await supplier.updateDebt(amount, type);
-    
+
+    await auditService.logAction({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      userRole: "admin",
+      action: "UPDATE_DEBT",
+      entity: "Supplier",
+      entityId: supplier._id,
+      changes: [
+        {
+          field: "totalPurchases",
+          oldValue: oldTotal,
+          newValue: supplier.totalPurchases,
+        },
+      ],
+      req,
+    });
+
     res.status(200).json({
       success: true,
       data: {
-        debt: supplier.debt
+        debt: supplier.debt,
       },
-      message: `Deuda ${type === 'increase' ? 'incrementada' : 'reducida'} exitosamente`
+      message: `Deuda ${type === "increase" ? "incrementada" : "reducida"} exitosamente`,
     });
   } catch (error) {
     next(error);
@@ -586,40 +722,40 @@ exports.getSupplierStats = async (req, res, next) => {
     const totalSuppliers = await Supplier.countDocuments();
     const activeSuppliers = await Supplier.countDocuments({ isActive: true });
     const inactiveSuppliers = totalSuppliers - activeSuppliers;
-    
+
     // Calificación promedio
     const avgRating = await Supplier.aggregate([
       { $match: { isActive: true } },
-      { $group: { _id: null, average: { $avg: '$rating' } } }
+      { $group: { _id: null, average: { $avg: "$rating" } } },
     ]);
-    
+
     // Distribución por condición fiscal
     const taxConditions = await Supplier.aggregate([
-      { $group: { _id: '$taxCondition', count: { $sum: 1 } } }
+      { $group: { _id: "$taxCondition", count: { $sum: 1 } } },
     ]);
-    
+
     // Distribución por condiciones de pago
     const paymentTermsDist = await Supplier.aggregate([
-      { $group: { _id: '$paymentTerms', count: { $sum: 1 } } }
+      { $group: { _id: "$paymentTerms", count: { $sum: 1 } } },
     ]);
-    
+
     // Deuda total
     const totalDebt = await Supplier.aggregate([
       { $match: { isActive: true } },
-      { $group: { _id: null, total: { $sum: '$debt' } } }
+      { $group: { _id: null, total: { $sum: "$debt" } } },
     ]);
-    
+
     // Total compras acumulado
     const totalPurchasesAmount = await Supplier.aggregate([
-      { $group: { _id: null, total: { $sum: '$totalPurchases' } } }
+      { $group: { _id: null, total: { $sum: "$totalPurchases" } } },
     ]);
-    
+
     // Distribución por calificación
     const ratingDistribution = await Supplier.aggregate([
-      { $group: { _id: '$rating', count: { $sum: 1 } } },
-      { $sort: { _id: 1 } }
+      { $group: { _id: "$rating", count: { $sum: 1 } } },
+      { $sort: { _id: 1 } },
     ]);
-    
+
     res.status(200).json({
       success: true,
       data: {
@@ -631,8 +767,8 @@ exports.getSupplierStats = async (req, res, next) => {
         paymentTerms: paymentTermsDist,
         totalDebt: totalDebt[0]?.total || 0,
         totalPurchases: totalPurchasesAmount[0]?.total || 0,
-        ratingDistribution
-      }
+        ratingDistribution,
+      },
     });
   } catch (error) {
     next(error);
@@ -645,23 +781,35 @@ exports.getSupplierStats = async (req, res, next) => {
 exports.toggleSupplierStatus = async (req, res, next) => {
   try {
     const supplier = await Supplier.findById(req.params.id);
-    
+
     if (!supplier) {
       return res.status(404).json({
         success: false,
-        message: 'Proveedor no encontrado'
+        message: "Proveedor no encontrado",
       });
     }
-    
+
     supplier.isActive = !supplier.isActive;
     await supplier.save();
-    
+
+    await auditService.logAction({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      userRole: "admin",
+      action: "TOGGLE_STATUS",
+      entity: "Supplier",
+      entityId: supplier._id,
+      oldData: { isActive: !supplier.isActive },
+      newData: { isActive: supplier.isActive },
+      req,
+    });
+
     res.status(200).json({
       success: true,
       data: {
-        isActive: supplier.isActive
+        isActive: supplier.isActive,
       },
-      message: `Proveedor ${supplier.isActive ? 'activado' : 'desactivado'} exitosamente`
+      message: `Proveedor ${supplier.isActive ? "activado" : "desactivado"} exitosamente`,
     });
   } catch (error) {
     next(error);
@@ -676,26 +824,34 @@ exports.getFinancialSummary = async (req, res, next) => {
     // Proveedores con deuda
     const suppliersWithDebt = await Supplier.find({
       isActive: true,
-      debt: { $gt: 0 }
-    }).select('name debt totalPurchases rating').sort({ debt: -1 });
-    
+      debt: { $gt: 0 },
+    })
+      .select("name debt totalPurchases rating")
+      .sort({ debt: -1 });
+
     // Total deuda por condición de pago
     const debtByPaymentTerms = await Supplier.aggregate([
       { $match: { isActive: true, debt: { $gt: 0 } } },
-      { $group: { _id: '$paymentTerms', totalDebt: { $sum: '$debt' }, count: { $sum: 1 } } }
+      {
+        $group: {
+          _id: "$paymentTerms",
+          totalDebt: { $sum: "$debt" },
+          count: { $sum: 1 },
+        },
+      },
     ]);
-    
+
     // Top 5 proveedores con mayor deuda
     const topDebtors = suppliersWithDebt.slice(0, 5);
-    
+
     res.status(200).json({
       success: true,
       data: {
         totalDebt: suppliersWithDebt.reduce((sum, s) => sum + s.debt, 0),
         suppliersWithDebtCount: suppliersWithDebt.length,
         debtByPaymentTerms,
-        topDebtors
-      }
+        topDebtors,
+      },
     });
   } catch (error) {
     next(error);

@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 require('dotenv').config();
 
-const User = require('../src/models/User');
+const User = require('../models/User');
 
 const createAdmin = async () => {
   try {
@@ -20,11 +20,11 @@ const createAdmin = async () => {
 
     // Crear admin
     const admin = await User.create({
-      nombre: 'Administrador',
+      name: 'Administrador',
       email: process.env.ADMIN_EMAIL,
       password: process.env.ADMIN_PASSWORD,
-      admin: true,
-      activo: true
+      isAdmin: true,
+      isActive: true
     });
 
     console.log('✅ Administrador creado exitosamente:');

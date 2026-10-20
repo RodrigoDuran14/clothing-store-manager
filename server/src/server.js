@@ -8,30 +8,34 @@ const dotenv = require('dotenv');
 dotenv.config();
 
 // Importar configuración de base de datos
-const connectDB = require('./src/config/database');
+const connectDB = require('./config/database')
 
 // Importar rutas
-const authRoutes = require('./src/routes/authRoutes');
-const userRoutes = require('./src/routes/userRoutes');
-const productRoutes = require('./src/routes/productRoutes');
-const categoryRoutes = require('./src/routes/categoryRoutes');
-const supplierRoutes = require('./src/routes/supplierRoutes');
-const clientRoutes = require('./src/routes/clientRoutes');
-const sellerRoutes = require('./src/routes/sellerRoutes');
-const saleRoutes = require('./src/routes/saleRoutes');
-const returnRoutes = require('./src/routes/returnRoutes');
-const promotionRoutes = require('./src/routes/promotionRoutes');
-const bankAccountRoutes = require('./src/routes/bankAccountRoutes');
-const partnerRoutes = require('./src/routes/partnerRoutes');
-const partnerSplitRoutes = require('./src/routes/partnerSplitRoutes');
-const cashRoutes = require('./src/routes/cashRoutes');
-const invoiceRoutes = require('./src/routes/invoiceRoutes');
-const reportRoutes = require('./src/routes/reportRoutes');
-const notificationRoutes = require('./src/routes/notificationRoutes');
-const notificationJobs = require('./src/jobs/notificationJobs');
+const authRoutes = require('./routes/authRoutes');
+const userRoutes = require('./routes/userRoutes');
+const productRoutes = require('./routes/productRoutes');
+const categoryRoutes = require('./routes/categoryRoutes');
+const supplierRoutes = require('./routes/supplierRoutes');
+const clientRoutes = require('./routes/clientRoutes');
+const sellerRoutes = require('./routes/sellerRoutes');
+const saleRoutes = require('./routes/saleRoutes');
+const returnRoutes = require('./routes/returnRoutes');
+const promotionRoutes = require('./routes/promotionRoutes');
+const bankAccountRoutes = require('./routes/bankAccountRoutes');
+const partnerRoutes = require('./routes/partnerRoutes');
+const partnerSplitRoutes = require('./routes/partnerSplitRoutes');
+const cashRoutes = require('./routes/cashRoutes');
+const invoiceRoutes = require('./routes/invoiceRoutes');
+const reportRoutes = require('./routes/reportRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
+const notificationJobs = require('./jobs/notificationJobs');
+const cartRoutes = require('./routes/cartRoutes');
+const paymentRoutes = require('./routes/paymentRoutes');
+const auditRoutes = require('./routes/auditRoutes');
+const customerRoutes = require('./routes/customerRoutes');
 
 // Importar middleware de errores
-const errorHandler = require('./src/middleware/errorHandler');
+const errorHandler = require('./middleware/errorHandler');
 
 // Conectar a MongoDB
 connectDB();
@@ -76,7 +80,10 @@ app.use('/api/cash', cashRoutes);
 app.use('/api/invoices', invoiceRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/notifications', notificationRoutes);
-
+app.use('/api/cart', cartRoutes);
+app.use('/api/payments', paymentRoutes);
+app.use('/api/audit-logs', auditRoutes);
+app.use('/api/customers', customerRoutes);
 
 
 // Iniciar jobs
